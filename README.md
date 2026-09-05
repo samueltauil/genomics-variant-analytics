@@ -115,9 +115,3 @@ Found a defect that blocked a delivery? See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## License
 
 [MIT](LICENSE). Demo variant content comes from Illumina Platinum Genomes via Azure Open Datasets under its own terms; the MIT grant covers this repository's specs, documentation, and code.
-
-## Background
-
-The specs were derived from source material that separates confirmed items from proposed or inferred ones, and they preserve that distinction — proposed items are labelled as assumptions rather than presented as design. That source material is not published here.
-
-This repository carries no customer names or attributions. Any that appeared in earlier drafts are unverified and excluded.
