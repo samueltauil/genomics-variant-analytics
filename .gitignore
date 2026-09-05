@@ -1,0 +1,52 @@
+# Genomic and patient data must never enter this repository.
+*.vcf
+*.vcf.gz
+*.gvcf
+*.gvcf.gz
+*.bam
+*.bai
+*.cram
+*.crai
+*.sam
+*.fastq
+*.fastq.gz
+*.fq
+*.fq.gz
+*.bcl
+*.fasta
+*.fa
+*.fa.gz
+*.2bit
+
+# Source material. Digested into the specs; never published.
+context/
+
+# Local environment and credentials
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+local.settings.json
+*.tfvars
+!example.tfvars
+
+# Build and tooling
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
+bin/
+obj/
+.terraform/
+*.tfstate
+*.tfstate.*
+work/
+.nextflow*/
+.nextflow.log*
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+*.swp

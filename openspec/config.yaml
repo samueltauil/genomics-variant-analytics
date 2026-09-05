@@ -1,0 +1,53 @@
+schema: spec-driven
+githubCopilot:
+  cloudAgent: false
+
+context: |
+  Domain: healthcare genomics analytics on Azure.
+  Concept: "Sequencer -> Governed Variant Store" solution accelerator.
+  Flow: sequencer -> Azure Files (SMB landing zone) -> Data Factory Copy ->
+  Blob/ADLS/OneLake -> Azure Batch or HPC (Nextflow/Snakemake/Cromwell) ->
+  Delta-based genomic variant store -> Fabric/Databricks notebooks and visualization.
+  Azure Storage Actions operates on Blob/ADLS only and cannot read a file share,
+  so it covers blob lifecycle after landing, not the Files-to-Blob hop.
+  Event Grid raises no file-created event for Azure file shares, so landing-zone
+  arrival is detected by scheduled scan, not by event.
+  Artifacts by stage: FASTQ (primary), BAM/CRAM (secondary), VCF/GVCF (variants),
+  Delta tables (tertiary).
+  The specs were derived from source material that is not published in this repo.
+  It separates confirmed items from proposed or inferred ones; keep that distinction
+  in specs and label proposed items as assumptions.
+  Never introduce customer names or attributions into this repository.
+  Demo data must be synthetic - no real PHI. Do not claim the accelerator makes
+  genomic data compliant, or that a released Microsoft blueprint exists.
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
