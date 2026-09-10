@@ -1,9 +1,15 @@
 ## 1. Repository guardrails and foundation
 
-Implementation note (2026-09-10): task 1.1 is complete. PR #1 installed the trusted data-hygiene workflow; `main` requires strict GitHub Actions checks and independent PR approval, including for administrators. Six isolated synthetic PRs failed the trusted policy and their merge API attempts were refused; an administrator direct push of a passing but unapproved PR head was also refused. The initial zero-approval fast-forward gap, corrective settings, run URLs, and pending test-PR closure submissions are recorded in [CONTRIBUTING.md](../../../CONTRIBUTING.md#live-acceptance-record-2026-09-10). All 12 local tests, actionlint 1.7.12, and strict OpenSpec validation pass. Task 1.2 and cloud work remain unverified.
+Current policy update (2026-09-10): the user authorized a solo-maintainer policy. Required approval counts are now zero in both branch protection and the default-branch ruleset; strict required checks, the PR rule, administrator enforcement, resolved threads, and force-push/deletion restrictions remain. The independent-review/direct-push evidence below describes the earlier configuration, not the current guarantee: a green, already-open PR head can again permit an administrator fast-forward. No further control expansion is planned; implementation is the priority.
+
+Implementation note (2026-09-10): task 1.1 is complete. PR #1 installed the trusted data-hygiene workflow; `main` requires strict GitHub Actions checks and independent PR approval, including for administrators. Six isolated synthetic PRs failed the trusted policy and their merge API attempts were refused; an administrator direct push of a passing but unapproved PR head was also refused. The initial zero-approval fast-forward gap, corrective settings, run URLs, and pending test-PR closure submissions are recorded in [CONTRIBUTING.md](../../../CONTRIBUTING.md#live-acceptance-record-2026-09-10). All 12 local tests, actionlint 1.7.12, and strict OpenSpec validation pass. Task 1.2 is also complete: secret scanning and push protection were confirmed enabled, a harmless control push succeeded, and a never-issued PAT-shaped probe received an explicit GitHub push-protection rejection. The remote stayed unchanged and the disposable branch was removed; see the [secret-protection evidence](../../../CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). Cloud work remains unverified.
+
+Local-first phase (2026-09-10): Azure access, provisioning, uploads and live benchmarks are paused at the user's request. The [candidate infrastructure inventory and local validator](../../../infra/README.md) prepare asset dependencies and task traceability only; resource-list and plan approval are pending before IaC generation. No cloud task is complete on the strength of this local validation, and all existing acceptance criteria remain unchanged.
+
+Task 1.3 preparation: the [local write smoke harness](../../../infra/README.md#local-write-smoke-test) measures bounded synthetic sequential writes, verifies SHA-256 read-back integrity and removes its scratch file. Network paths are rejected. This implements local test tooling only, not share provisioning, the 100 GiB SMB benchmark or IOPS-ceiling verification; task 1.3 remains pending.
 
 - [x] 1.1 Create the public repository, protect the default branch to require a pull request, and add the data-hygiene status check as required, and verify a pull request containing a `.vcf`, `.bam`, `.cram`, or `.fastq` file or an oversized file cannot be merged, and a direct push to the default branch is refused
-- [ ] 1.2 Enable secret scanning with push protection, and verify a commit carrying a recognized credential pattern is blocked at push time
+- [x] 1.2 Enable secret scanning with push protection, and verify a commit carrying a recognized credential pattern is blocked at push time
 - [ ] 1.3 Provision the SSD provisioned-v2 classic file share for the SMB landing zone with SMB Multichannel enabled, and verify a 100 GiB sequential write sustains the provisioned throughput and the share reports the expected IOPS ceiling
 - [ ] 1.4 Provision the ADLS Gen2 landing account and container set following the healthcare data solutions folder taxonomy (`Ingest`, `Process`, `Failed`, `External`, `Inventory`, `ReferenceData`, `SampleData`) with genomics modality subfolders, and verify each path exists and is writable by the staging identity only
 - [ ] 1.5 Assemble the demo dataset from Illumina Platinum Genomes plus generated synthetic subject, sample, and cohort identifiers, and verify a scan of the manifest finds no real patient identifier and every subject id matches the synthetic id pattern
@@ -11,8 +17,12 @@ Implementation note (2026-09-10): task 1.1 is complete. PR #1 installed the trus
 
 ## 2. Landing zone behavior
 
-- [ ] 2.1 Implement the scheduled directory scan that inventories run folders, and verify it lists run and sample identifiers, sizes, arrival timestamps, and states for a seeded run
-- [ ] 2.2 Implement the completeness stability check (size and last-modified unchanged across two consecutive polls, or vendor completion marker), and verify a file copied slowly reports `arriving` until the copy ends and `complete` afterwards
+Task 2.1 verification (2026-09-10): [the local scheduled scanner](../../../docs/landing-inventory.md) inventories seeded synthetic run folders, persists first-observed arrivals across restarts, and reports run/sample IDs, sizes, timestamps and states. The original 12 focused tests passed, including scheduled discovery, path guards and failed-scan snapshot preservation. This verifies the scan logic locally, not an Azure scheduler or SMB connectivity.
+
+Task 2.2 verification (2026-09-10): 21 focused tests pass with the two-consecutive-observation size/mtime rule and optional root-relative vendor completion markers. A synthetic slow copy remains `arriving` during growth and becomes `complete` after stability; new changes revoke completeness. Stale markers, cross-run markers, missing files and unresolved identifiers are tested. Task 2.3 is blocked on a trustworthy transfer-failure contract: a paused or truncated transfer can look stable, so no automatic failure detection or staging authorization is claimed. No Azure operations were performed.
+
+- [x] 2.1 Implement the scheduled directory scan that inventories run folders, and verify it lists run and sample identifiers, sizes, arrival timestamps, and states for a seeded run
+- [x] 2.2 Implement the completeness stability check (size and last-modified unchanged across two consecutive polls, or vendor completion marker), and verify a file copied slowly reports `arriving` until the copy ends and `complete` afterwards
 - [ ] 2.3 Implement failed-transfer detection and the retry path, and verify an interrupted transfer is marked `failed`, is excluded from staging, and that re-sending it replaces the failed entry without affecting sibling files in the run
 - [ ] 2.4 Restrict landing-zone data-plane access to the ingestion identity and the instrument service account, and verify a pipeline identity is denied a direct read of the share
 
@@ -25,6 +35,8 @@ Implementation note (2026-09-10): task 1.1 is complete. PR #1 installed the trus
 - [ ] 3.5 Configure the Storage Actions task for blob-side lifecycle (tiering and index tags) on staged artifacts, and verify an artifact past the age threshold transitions tier while its URI and lineage link still resolve
 
 ## 4. Reference data
+
+Task 4.3 preparation (2026-09-10): the [local submission gate](../../../docs/reference-submission.md) validates exact workflow/build/annotation sets against a trusted inventory and pins manifest digests. Twelve synthetic tests pass, including proof that incompatible or unavailable references never call the allocator callback. The real Nextflow submission path and published reference inventory do not yet exist, so task 4.3 remains unchecked; no compute or reference downloads occurred.
 
 - [ ] 4.1 Publish GRCh38 and hg19 builds plus gene and transcript annotations into `ReferenceData` under `name/version` paths with a per-artifact checksum manifest, and verify the inventory listing returns type, name, and version for each entry
 - [ ] 4.2 Enforce write-once semantics on published reference versions, and verify a write targeting an existing published version is rejected while publishing a new version succeeds and leaves the prior version retrievable
@@ -43,10 +55,14 @@ Implementation note (2026-09-10): task 1.1 is complete. PR #1 installed the trus
 
 ## 6. Metadata store
 
-- [ ] 6.1 Model the Subject → Sample → Sequencing Run → FASTQ → BAM/CRAM → VCF → variant chain, and verify downward traversal from a subject and upward traversal from a variant both return the full chain for the demo data
-- [ ] 6.2 Populate file-level entries with storage URI, analysis stage, producing run, and integrity result, and verify every artifact of the demo run has all four populated
-- [ ] 6.3 Enforce referential integrity on writes, and verify an entry referencing a non-existent sample is rejected
-- [ ] 6.4 Implement archive semantics, and verify archiving an artifact leaves referencing variant records resolving to a valid entry marked archived
+Tasks 6.2 and 6.4 verification (2026-09-10): 21 focused metadata tests pass. Every artifact in the synthetic local demo chains has a storage URI, typed analysis stage, existing producer run and explicit integrity result. Pipeline producers are registered separately from sequencing runs. File retrieval persists those fields; invalid metadata rolls back entity/link insertion, and legacy version-1 stores require explicit backfill without invented values. Metadata-only archival preserves URI, producer, integrity and variant ancestry, including across restarts and concurrent snapshot reads. No payloads were read or archived in storage; real pipeline execution and grants remain pending.
+
+Tasks 6.1 and 6.3 verification (2026-09-10): the [local metadata model](../../../docs/metadata-store.md) persists synthetic Subject/Sample/Run/artifact/variant-occurrence relationships in SQLite. Thirteen focused tests verify full-chain traversal in both directions, branching/shared ancestors, missing-sample rejection without partial writes, foreign keys, persistence and snapshot-consistent reads. This verifies the model using locally generated demo metadata, not the future Platinum Genomes dataset or pipeline integration. File attributes, archive semantics and access grants remain pending; the API is trusted local development code and must not be exposed as a governed query service. Task 2.3 remains blocked on transfer-failure evidence. No Azure operations were performed.
+
+- [x] 6.1 Model the Subject → Sample → Sequencing Run → FASTQ → BAM/CRAM → VCF → variant chain, and verify downward traversal from a subject and upward traversal from a variant both return the full chain for the demo data
+- [x] 6.2 Populate file-level entries with storage URI, analysis stage, producing run, and integrity result, and verify every artifact of the demo run has all four populated
+- [x] 6.3 Enforce referential integrity on writes, and verify an entry referencing a non-existent sample is rejected
+- [x] 6.4 Implement archive semantics, and verify archiving an artifact leaves referencing variant records resolving to a valid entry marked archived
 - [ ] 6.5 Split clinical from research metadata behind separate grants, and verify a research-only principal reads research attributes and receives no clinical attributes
 
 ## 7. Delta variant store

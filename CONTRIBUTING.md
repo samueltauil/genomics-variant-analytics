@@ -38,6 +38,13 @@ If your change alters observable behavior and the spec does not move, the review
 
 ## Pull requests
 
+Current policy (2026-09-10): the maintainer authorized zero required approvals
+to support solo development. PRs, strict passing checks, administrator
+enforcement and resolved review threads remain required. Historical
+independent-review and administrator direct-push rejection evidence below
+describes the earlier configuration. A green, already-open PR head may again
+allow an administrator fast-forward; no stronger direct-push guarantee is made.
+
 - One concern per pull request
 - Say what you verified and how — every task in this repository carries a verification condition, and reviews expect the same
 - Automated review runs first on workflow, container, manifest, and schema paths; a reference-build change without a version bump, or a schema change without a matching spec change, gets flagged
@@ -90,6 +97,54 @@ Each negative probe branched independently from `1791e831b87af93999655c265641572
 All six head statuses failed, GitHub reported each PR as `BLOCKED`, and all six administrator merge API attempts returned HTTP 405. PRs #4-#8 explicitly named the failing required `data-hygiene` check; #9 reported both required checks failing because proposed-code tests also lost their scanner. Independent approval was additionally required. The protected `main` ref stayed at `1791e831b87af93999655c265641572e86c48b01` throughout these rejection tests, and no forbidden fixture was merged. Test-PR closure requests are awaiting interactive submission; the probes remain unmerged and must not be approved or merged. Workflow logs have GitHub's configured retention period.
 
 Local verification: 12 synthetic repository tests pass, both workflows pass actionlint 1.7.12, and strict OpenSpec validation passes. This completes task 1.1's implementation and acceptance conditions. Secret push protection (task 1.2) and all Azure deployment work remain unverified.
+
+## Secret scanning and push protection
+
+GitHub repository secret scanning and push protection are separate from the file-name and size check. Both settings must be enabled under the repository's security settings. An administrator can inspect them without retrieving credentials:
+
+```sh
+gh api repos/OWNER/REPO --jq '.security_and_analysis | {secret_scanning, secret_scanning_push_protection}'
+```
+
+Both statuses must be `enabled`; settings alone do not prove push-time enforcement. See [GitHub's supported patterns](https://docs.github.com/en/code-security/secret-scanning/introduction/supported-secret-scanning-patterns) and [command-line push protection](https://docs.github.com/en/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line).
+
+### Administrator acceptance procedure
+
+1. Use a disposable branch, never the default branch. Verify a harmless control push succeeds so authentication and branch restrictions cannot explain the negative result.
+2. Construct a nonfunctional credential-shaped value locally, never issued by a provider or associated with an account. Use a currently supported push-protection pattern, including its format/checksum requirements. Do not obtain a real credential, read a credential from the environment, or use a published secret found elsewhere.
+3. Put only the synthetic value in a disposable commit. Keep it out of the implementation branch, documentation, and logs. Push that commit to the same control branch and require an explicit secret-protection rejection naming the credential type, commit, and file location. An authentication error, branch-protection refusal, or local scanner failure is not a pass.
+4. Do not follow the bypass link or allow the test value. Verify the remote branch still points to the harmless control commit, then delete the disposable remote branch and confirm its absence. Record the time, actor role, settings, commit IDs, redacted rejection, and cleanup result before completing task 1.2.
+
+### Secret-protection acceptance record (2026-09-10)
+
+Verified on `samueltauil/genomics-variant-analytics` at 15:21 UTC by a repository administrator. The REST API reported `secret_scanning.status` and `secret_scanning_push_protection.status` as `enabled` before the test; both were already enabled and required no settings change. Non-provider patterns and validity checks were disabled, so this record does not claim either feature was tested.
+
+The test constructed a never-issued GitHub PAT-shaped value locally: a 30-character random Base62 payload and a six-character, zero-padded Base62 CRC32 checksum, following [GitHub's published token format](https://github.blog/engineering/platform-security/behind-githubs-new-authentication-token-formats/). The value was not obtained from an account, used for authentication, or printed. Only the disposable Git object contained the value; it is not part of this implementation branch. This tests recognition of a pattern, not validity of a credential.
+
+| Observation | Result |
+|---|---|
+| Base `main` commit | `1791e831b87af93999655c265641572e86c48b01` |
+| Disposable branch | `acceptance/secret-push-20260910-ef675937` |
+| Harmless control commit | `71ce48f5ee44c9b7e123be59208012a0c46f988a`; push succeeded and remote SHA matched |
+| Synthetic probe commit | `0308f7ce791ca7aa43f87fcf69c2eced402347ae`; only added `synthetic-push-protection.txt`, 41 bytes |
+| Probe push | Exit 1, explicit `GH013` secret-protection rejection |
+| Remote after rejection | Still the harmless control SHA; probe did not advance the branch |
+| Cleanup | Remote branch deletion succeeded; `git ls-remote --heads` confirmed its absence |
+
+Relevant server response, with the bypass URL omitted:
+
+```text
+GH013: Repository rule violations found
+GITHUB PUSH PROTECTION
+Push cannot contain secrets
+GitHub Personal Access Token
+commit: 0308f7ce791ca7aa43f87fcf69c2eced402347ae
+path: synthetic-push-protection.txt:1
+```
+
+No bypass was requested and no pull request was opened for the probe. Detection was reported in the push response; a Security-tab alert was not verified for this rejected, unbypassed push. Public-repository user push protection can also apply, so the test records repository settings and the observed rejection without isolating those overlapping controls. A local pre-push fixture assertion initially caught Windows newline conversion in Git tree input; byte-exact subprocess input corrected it before the credential-shaped commit was pushed. The same harmless control branch was reused and then removed. The rejection above, not that local assertion, is the acceptance evidence. Rejected commits and deleted test branches are not durable public evidence links; the redacted transcript and commit IDs are recorded here for review.
+
+**Limits:** push protection covers recognized supported patterns, not every password or arbitrary sensitive text. Provider formats and coverage can change. GitHub offers explicit bypass flows; a successful no-bypass test does not prove bypass is impossible. The genomic-file control remains merge-time enforcement. For an actual leaked credential, revoke or rotate it and remove it from all affected commits; deleting only the latest file does not remove the secret from history.
 
 ## Releases
 
