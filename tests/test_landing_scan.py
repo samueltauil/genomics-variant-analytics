@@ -46,7 +46,98 @@ class LandingScanTests(unittest.TestCase):
         self.assertEqual(record["state"], "arriving")
         self.assertTrue(record["present"])
         self.assertIsNone(record["metadata_error"])
-        self.assertFalse(report["completeness_evaluated"])
+        self.assertTrue(report["completeness_evaluated"])
+
+    def test_slow_copy_is_arriving_until_two_unchanged_observations(self):
+        waits = 0
+
+        def write_chunk(_interval):
+            nonlocal waits
+            waits += 1
+            if waits < 3:
+                with self.file.open("ab") as output:
+                    output.write(b"synthetic chunk")
+
+        with patch("scripts.scan_landing.time.sleep", side_effect=write_chunk):
+            reports = list(poll_inventory(self.root, self.inventory, polls=4, interval_seconds=5))
+        self.assertEqual([report["files"][0]["state"] for report in reports],
+                         ["arriving", "arriving", "arriving", "complete"])
+        self.assertEqual(len({report["files"][0]["arrival_timestamp"] for report in reports}), 1)
+
+    def test_mtime_change_alone_revokes_completeness(self):
+        self.scan()
+        self.assertEqual(self.scan()["files"][0]["state"], "complete")
+        metadata = self.file.stat()
+        os.utime(self.file, ns=(metadata.st_atime_ns, metadata.st_mtime_ns + 10_000_000_000))
+        self.assertEqual(self.scan()["files"][0]["state"], "arriving")
+        self.assertEqual(self.scan()["files"][0]["state"], "complete")
+
+    def test_missing_and_returning_file_requires_new_stability_pair(self):
+        self.scan()
+        self.assertEqual(self.scan()["files"][0]["state"], "complete")
+        metadata = self.file.stat()
+        content = self.file.read_bytes()
+        self.file.unlink()
+        self.assertEqual(self.scan()["files"][0]["state"], "arriving")
+        self.file.write_bytes(content)
+        os.utime(self.file, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+        self.assertEqual(self.scan()["files"][0]["state"], "arriving")
+        self.assertEqual(self.scan()["files"][0]["state"], "complete")
+
+    def test_unmatched_file_never_becomes_complete(self):
+        (self.root / "unknown.txt").write_text("synthetic")
+        self.scan()
+        record = next(entry for entry in self.scan()["files"] if entry["path"] == "unknown.txt")
+        self.assertEqual(record["state"], "arriving")
+
+    def test_fresh_vendor_marker_completes_only_its_run(self):
+        marker = self.root / "SYN-RUN-001" / "RTAComplete.txt"
+        marker.write_text("synthetic marker")
+        modified = self.file.stat().st_mtime_ns
+        os.utime(marker, ns=(modified, modified))
+        other = self.root / "SYN-RUN-002" / self.file.name
+        other.parent.mkdir()
+        other.write_bytes(b"synthetic")
+        report = scan_once(self.root, self.inventory, completion_marker="{run_id}/RTAComplete.txt")
+        records = {record["path"]: record for record in report["files"]}
+        self.assertEqual(records[self.relative]["state"], "complete")
+        self.assertEqual(records[other.relative_to(self.root).as_posix()]["state"], "arriving")
+        self.assertEqual(records["SYN-RUN-001/RTAComplete.txt"]["state"], "arriving")
+
+    def test_stale_marker_does_not_complete_a_new_or_changed_file(self):
+        marker = self.root / "SYN-RUN-001" / "RTAComplete.txt"
+        marker.write_text("synthetic marker")
+        modified = self.file.stat().st_mtime_ns
+        os.utime(marker, ns=(modified - 10_000_000_000, modified - 10_000_000_000))
+        report = scan_once(self.root, self.inventory, completion_marker="{run_id}/RTAComplete.txt")
+        record = next(entry for entry in report["files"] if entry["path"] == self.relative)
+        self.assertEqual(record["state"], "arriving")
+
+    def test_invalid_marker_templates_are_rejected_before_inventory_creation(self):
+        for template in ("../outside", "/outside", "C:/outside", r"run\marker", "{unknown}",
+                         "{run_id.upper}", "{run_id!r}", "{run_id:>20}", "", "{path}"):
+            with self.subTest(template=template):
+                with self.assertRaises(ValueError):
+                    scan_once(self.root, self.directory / "invalid.sqlite3", completion_marker=template)
+
+    def test_marker_policy_is_bound_to_inventory(self):
+        self.scan()
+        with self.assertRaisesRegex(ValueError, "already bound"):
+            scan_once(self.root, self.inventory, completion_marker="{run_id}/RTAComplete.txt")
+
+    def test_cli_forwards_completion_marker(self):
+        marker = self.root / "SYN-RUN-001" / "RTAComplete.txt"
+        marker.write_text("synthetic")
+        modified = self.file.stat().st_mtime_ns
+        os.utime(marker, ns=(modified, modified))
+        result = subprocess.run(
+            [sys.executable, "-I", str(SCANNER), "--root", str(self.root),
+             "--inventory", str(self.inventory), "--completion-marker", "{run_id}/RTAComplete.txt"],
+            capture_output=True, text=True, timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        record = next(entry for entry in json.loads(result.stdout)["files"] if entry["path"] == self.relative)
+        self.assertEqual(record["state"], "complete")
 
     def test_repeated_poll_and_restart_preserve_arrival_and_update_size(self):
         first = self.scan()["files"][0]

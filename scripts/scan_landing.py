@@ -3,10 +3,11 @@ from datetime import datetime, timezone
 import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import sqlite3
 import stat
+from string import Formatter
 import sys
 import time
 
@@ -51,7 +52,21 @@ def local_path(value):
     return path
 
 
-def scan_once(root, inventory, pattern=DEFAULT_PATTERN):
+def marker_path(template, values):
+    for _, field, format_spec, conversion in Formatter().parse(template):
+        if field is not None and (
+            field not in {"run_id", "sample_id", "path"} or format_spec or conversion
+        ):
+            raise ValueError("Marker template supports only run_id, sample_id and path fields.")
+    relative = template.format(**values)
+    if not relative or "\\" in relative or ":" in relative or relative.startswith("/"):
+        raise ValueError("Completion marker must be a relative path inside the landing root.")
+    if any(part in {"", ".", ".."} for part in relative.split("/")):
+        raise ValueError("Completion marker cannot contain empty or dot path segments.")
+    return PurePosixPath(relative).as_posix()
+
+
+def scan_once(root, inventory, pattern=DEFAULT_PATTERN, completion_marker=None):
     root = local_path(root)
     inventory = local_path(inventory)
     if not root.is_dir():
@@ -61,6 +76,8 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN):
     matcher = re.compile(pattern)
     if not {"run_id", "sample_id"}.issubset(matcher.groupindex):
         raise ValueError("Path pattern requires named run_id and sample_id groups.")
+    if completion_marker is not None:
+        marker_path(completion_marker, {"run_id": "run", "sample_id": "sample", "path": "file"})
     observed_at = datetime.now(timezone.utc).isoformat()
     observations = []
 
@@ -94,10 +111,12 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN):
     try:
         with connection:
             connection.execute("CREATE TABLE IF NOT EXISTS source (root TEXT PRIMARY KEY, pattern TEXT NOT NULL)")
-            binding = connection.execute("SELECT root, pattern FROM source").fetchall()
-            if binding and [(row["root"], row["pattern"]) for row in binding] != [(str(root), pattern)]:
-                raise ValueError("Inventory is already bound to a different root or path pattern.")
-            connection.execute("INSERT OR IGNORE INTO source VALUES (?, ?)", (str(root), pattern))
+            if "completion_marker" not in {row["name"] for row in connection.execute("PRAGMA table_info(source)")}:
+                connection.execute("ALTER TABLE source ADD COLUMN completion_marker TEXT")
+            binding = connection.execute("SELECT root, pattern, completion_marker FROM source").fetchall()
+            if binding and [tuple(row) for row in binding] != [(str(root), pattern, completion_marker)]:
+                raise ValueError("Inventory is already bound to a different root, path pattern or completion marker.")
+            connection.execute("INSERT OR IGNORE INTO source VALUES (?, ?, ?)", (str(root), pattern, completion_marker))
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS files (
                     path TEXT PRIMARY KEY, run_id TEXT, sample_id TEXT,
@@ -107,31 +126,56 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN):
                     present INTEGER NOT NULL DEFAULT 1
                 )
             """)
-            connection.execute("UPDATE files SET present = 0")
+            previous = {row["path"]: dict(row) for row in connection.execute("SELECT * FROM files")}
+            by_path = {observation[0]: observation for observation in observations}
+            markers = {}
+            if completion_marker is not None:
+                for relative, run_id, sample_id, *_, metadata_error in observations:
+                    if metadata_error is None:
+                        markers[relative] = marker_path(completion_marker, {
+                            "run_id": run_id, "sample_id": sample_id, "path": relative,
+                        })
+                if any(relative == marker for relative, marker in markers.items()):
+                    raise ValueError("A file cannot be its own completion marker.")
+            marker_paths = frozenset(markers.values())
+            evaluated = []
+            for observation in observations:
+                relative, _, _, size_bytes, modified_ns, _, _, metadata_error = observation
+                prior = previous.get(relative)
+                stable = (
+                    prior is not None and prior["present"] and metadata_error is None
+                    and prior["size_bytes"] == size_bytes and prior["modified_ns"] == modified_ns
+                )
+                marker = by_path.get(markers.get(relative))
+                marked = marker is not None and marker[4] >= modified_ns
+                complete = metadata_error is None and relative not in marker_paths and (stable or marked)
+                evaluated.append((*observation, "complete" if complete else "arriving"))
+            connection.execute("UPDATE files SET present = 0, state = 'arriving'")
             connection.executemany("""
                 INSERT INTO files (
                     path, run_id, sample_id, size_bytes, modified_ns,
-                    arrival_timestamp, last_seen_timestamp, metadata_error
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    arrival_timestamp, last_seen_timestamp, metadata_error, state
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(path) DO UPDATE SET
                     run_id = excluded.run_id, sample_id = excluded.sample_id,
                     size_bytes = excluded.size_bytes, modified_ns = excluded.modified_ns,
                     last_seen_timestamp = excluded.last_seen_timestamp,
-                    metadata_error = excluded.metadata_error, present = 1
-            """, observations)
+                    metadata_error = excluded.metadata_error, state = excluded.state, present = 1
+            """, evaluated)
             records = [dict(row) for row in connection.execute("SELECT * FROM files ORDER BY path")]
         for record in records:
             record["present"] = bool(record["present"])
         return {
-            "schema_version": 1, "mode": "local-only", "observed_at": observed_at,
+            "schema_version": 2, "mode": "local-only", "observed_at": observed_at,
             "file_count": len(observations), "files": records,
-            "completeness_evaluated": False, "azure_readiness": "not-evaluated",
+            "completeness_evaluated": True, "azure_readiness": "not-evaluated",
         }
     finally:
         connection.close()
 
 
-def poll_inventory(root, inventory, pattern=DEFAULT_PATTERN, polls=1, interval_seconds=60):
+def poll_inventory(root, inventory, pattern=DEFAULT_PATTERN, polls=1, interval_seconds=60,
+                   completion_marker=None):
     if isinstance(polls, bool) or not isinstance(polls, int) or polls < 1:
         raise ValueError("Poll count must be a positive integer.")
     if not math.isfinite(interval_seconds) or interval_seconds <= 0:
@@ -139,7 +183,7 @@ def poll_inventory(root, inventory, pattern=DEFAULT_PATTERN, polls=1, interval_s
     for poll_index in range(polls):
         if poll_index:
             time.sleep(interval_seconds)
-        yield scan_once(root, inventory, pattern)
+        yield scan_once(root, inventory, pattern, completion_marker)
 
 
 def main():
@@ -147,6 +191,7 @@ def main():
     parser.add_argument("--root", required=True)
     parser.add_argument("--inventory", required=True)
     parser.add_argument("--path-pattern", default=DEFAULT_PATTERN)
+    parser.add_argument("--completion-marker", help="Root-relative vendor marker template, e.g. {run_id}/RTAComplete.txt")
     parser.add_argument("--polls", type=int, default=1)
     parser.add_argument("--interval-seconds", type=float, default=60)
     arguments = parser.parse_args()
@@ -154,6 +199,7 @@ def main():
         for report in poll_inventory(
             arguments.root, arguments.inventory, arguments.path_pattern,
             arguments.polls, arguments.interval_seconds,
+            arguments.completion_marker,
         ):
             print(json.dumps(report), flush=True)
     except (OSError, ValueError, re.error, sqlite3.Error) as error:
