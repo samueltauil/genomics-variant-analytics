@@ -19,6 +19,10 @@ See [proposal.md](proposal.md) for motivation. This section records only the pla
 13. **Push rulesets target private and internal repositories only.** They restrict file extensions, paths, path length, and file size across a repository's whole fork network, but a public repository cannot use them. Branch and tag rulesets are not restricted this way. Repository-level rulesets work on personal accounts; organization-wide rulesets need Team or Enterprise. Release assets are capped at 2 GiB per file with no total size limit. ([About rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets), [Available rules for rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/available-rules-for-rulesets), [About releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases))
 14. **Copilot content exclusion, policy management, and audit logs require Copilot Business or Enterprise.** They are unavailable to a personal-account deployment. Agent skills, custom agents, prompt files, MCP servers, Copilot Spaces, repository memory, code review, and scheduled agent automations are not organization-gated. ([GitHub Copilot features](https://docs.github.com/en/copilot/get-started/features))
 
+### Workload characterization context
+
+The [genomics storage workload note](../../../docs/genomics-workload-context.md) summarizes the SPECstorage Solution 2020 GENOMICS model with source-page references. Its read-heavy, metadata-active aggregate profile motivates proposed stage-specific measurements for secondary analysis; it does not describe sequencer writes alone or validate Delta analytics. Calibrate any future mixed-I/O tests against the selected workflow, including concurrency, working-set size, cache state and data-reduction assumptions. Synthetic JOBS are not genomes or sizing evidence. This context does not change the capability specifications, task 1.3's 100 GiB SMB acceptance test, task completion, or the pause on Azure operations.
+
 ## Goals / Non-Goals
 
 **Goals:**
