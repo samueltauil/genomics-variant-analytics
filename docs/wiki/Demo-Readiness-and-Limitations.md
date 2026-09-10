@@ -1,6 +1,6 @@
 # Demo Readiness and Limitations
 
-**There is no runnable end-to-end demo as of 2026-09-10.** Published demonstrations cover repository guardrails. Earlier local tools are recorded in development commit `d89796e`; new completeness, reference-submission and metadata-model changes pass synthetic tests but remain uncommitted. Storage services, processing pipelines, variant tables, notebooks, visualizations and deployment automation remain specified only.
+**There is no runnable end-to-end demo as of 2026-09-10.** Repository guardrails have live acceptance evidence. Local tools, completeness checks, reference-submission and metadata-model changes pass synthetic tests and are published through [commit 4900f26](https://github.com/samueltauil/genomics-variant-analytics/tree/4900f26), pending review under PR #12. Storage services, processing pipelines, variant tables, notebooks, visualizations and deployment automation remain specified only.
 
 ## Readiness
 
@@ -20,7 +20,7 @@
 | Access tiers, catalog integration, and analytics | Specified only |
 | Preflight, reset, teardown, and cost measurements | Not implemented or measured |
 
-The working-tree task record is **6/89 completed** (1.1, 1.2, 2.1, 2.2, 6.1 and 6.3), and all **76 local tests pass**. This wiki update publishes documentation only, not the new uncommitted code assets. See the [Development Guide](Development-Guide#local-only-implementation) for exact local scope.
+The published development task record is **6/89 completed** (1.1, 1.2, 2.1, 2.2, 6.1 and 6.3), and all **76 local tests pass**. The implementation and wiki sources are on their review branches, not `main`. See the [Development Guide](Development-Guide#local-only-implementation) for exact local scope.
 
 Azure authentication, account discovery, provisioning, uploads, live benchmarks and teardown are paused. Task 1.3's 100 GiB SMB measurement and IOPS verification remain pending. Local validation neither completes cloud acceptance nor authorizes cloud access; IaC generation still requires a researched resource list and concrete-plan approval. No Azure resources were created by this implementation. Existing subscription charges are unknown; no numeric spending limit or priced resource sizing has been approved.
 

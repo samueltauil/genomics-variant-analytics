@@ -1,6 +1,6 @@
 # Data Model and Provenance
 
-**Variant store specified; metadata lineage implemented locally as of 2026-09-10.** This page distinguishes the planned variant store from the synthetic SQLite lineage model. The new metadata implementation remains uncommitted and is not a deployed service. Read the linked specs before choosing ingestion libraries or physical table layouts.
+**Variant store specified; metadata lineage implemented locally as of 2026-09-10.** This page distinguishes the planned variant store from the synthetic SQLite lineage model. The metadata implementation is committed and pushed under [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12), not merged into `main` or deployed as a service. Read the linked specs before choosing ingestion libraries or physical table layouts.
 
 ## Variant Records
 
@@ -65,7 +65,7 @@ This is artifact ancestry, not sample-genotype assignment: a multiplexed run or 
 
 The API requires a trusted absolute local database path, separate from scanner inventory. It rejects network/redirect paths using the shared local-path guard and rejects foreign database schemas. It accepts no clinical attributes, but returns subject linkage: **do not expose it to analysts or treat it as access-controlled**. Identifier syntax is not PHI detection, and direct database access can bypass application rules. Protect files and reports with local filesystem controls.
 
-Task 6.2's file URI, producing workflow run and integrity fields, task 6.4's archive behavior, task 6.5's clinical/research grants, audit and Delta/Purview integration remain pending. Trace responses declare `mode: local-only` and `azure_readiness: not-evaluated`. Current code and usage are in the uncommitted development files `scripts/metadata_store.py`, `tests/test_metadata_store.py` and `docs/metadata-store.md`; this wiki publication does not publish those files.
+Task 6.2's file URI, producing workflow run and integrity fields, task 6.4's archive behavior, task 6.5's clinical/research grants, audit and Delta/Purview integration remain pending. Trace responses declare `mode: local-only` and `azure_readiness: not-evaluated`. Published development sources are the [metadata API](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/scripts/metadata_store.py), [synthetic tests](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/tests/test_metadata_store.py) and [usage guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/metadata-store.md). Publication is not evidence of cloud readiness or governed access.
 
 ## Versioning and Retention
 

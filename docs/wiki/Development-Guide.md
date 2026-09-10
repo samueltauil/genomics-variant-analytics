@@ -1,6 +1,6 @@
 # Development Guide
 
-The published baseline includes repository data hygiene. Earlier local infrastructure validation, write-test tooling and landing inventory are recorded in development commit `d89796e`. New completeness, reference-submission and metadata-model changes remain uncommitted as of 2026-09-10. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
+The default-branch baseline includes repository data hygiene. Local infrastructure validation, write-test tooling, landing completeness, reference-submission and metadata-model changes are committed and pushed through [4900f26](https://github.com/samueltauil/genomics-variant-analytics/tree/4900f26), under [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12), as of 2026-09-10. They are not merged into `main`. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
 
 ## Local Checks
 
@@ -20,11 +20,11 @@ Fetch the current target branch before the comparison and substitute it for `ori
 | `1` | A policy violation was found |
 | `2` | Inspection could not complete; do not treat this as a pass |
 
-The original published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The expanded local working tree passes **76 tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness, 12 submission and 13 metadata tests. Strict OpenSpec validation also passes. No remote CI result is claimed for the new uncommitted implementation. Fixtures must never contain biological data, real identifiers, or credentials.
+The original published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The committed development implementation passes **76 local tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness, 12 submission and 13 metadata tests (82.339 seconds on Windows in the publication check). Strict OpenSpec validation and introduced-history data hygiene also pass. Consult PR #12 for the current hosted CI result. Fixtures must never contain biological data, real identifiers, or credentials.
 
 ## Local-Only Implementation
 
-The following commands require the current development working tree; they are not yet available from a fresh checkout of `main`. This documentation publication does not publish the implementation files.
+The following commands require the published `security/secret-push-protection` development branch or commit `4900f26`; they are not yet available from a fresh checkout of `main`. Implementation publication does not authorize Azure operations. Local Azurite configuration, databases and storage directories are ignored; existing runtime files are not deleted.
 
 ```powershell
 ./scripts/Invoke-Infrastructure.ps1 -Action Validate | ConvertTo-Json -Depth 4
@@ -56,7 +56,7 @@ Both landing tools reject UNC/device paths and symlink/reparse redirects; on Win
 
 The new `scripts/validate_submission.py` CLI accepts three trusted local JSON paths through `--request`, `--compatibility` and `--inventory`. It requires an exact workflow version, one explicit genome version and the complete compatible annotation set. Missing or incompatible versions fail without a default build. URI/checksum metadata and canonical-JSON manifest digests are pinned in its output; URIs are not resolved or downloaded. It always reports `compute_allocated: false` and `azure_readiness: not-evaluated`.
 
-The Python `submit_run` API validates before calling an injected allocator. Twelve synthetic tests verify this ordering and rejection cases. Task 4.3 remains pending until the real workflow uses the gate with a trusted published inventory. Payload checksums, availability, scientific compatibility, attestation and cloud access are not established by placeholder test manifests. See the uncommitted `docs/reference-submission.md` for full schemas and examples.
+The Python `submit_run` API validates before calling an injected allocator. Twelve synthetic tests verify this ordering and rejection cases. Task 4.3 remains pending until the real workflow uses the gate with a trusted published inventory. Payload checksums, availability, scientific compatibility, attestation and cloud access are not established by placeholder test manifests. See the [reference-submission guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/reference-submission.md) for full schemas and examples.
 
 The local `scripts.metadata_store.MetadataStore` Python API implements tasks 6.1 and 6.3 with synthetic entity identifiers and typed parent links. It persists full-chain ancestry in SQLite, rejects missing parents without partial writes, and returns snapshot-consistent forward/backward traces. Thirteen tests cover these rules and shared ancestry, persistence and path guards:
 
@@ -64,7 +64,7 @@ The local `scripts.metadata_store.MetadataStore` Python API implements tasks 6.1
 python -m unittest discover -s tests -p test_metadata_store.py -v
 ```
 
-Use a trusted absolute local database path, separate from the landing inventory, and close the store through its context manager. This is not a CLI or an access-controlled service. File attributes (6.2), archive behavior (6.4), access grants (6.5) and real pipeline integration remain pending. The uncommitted `docs/metadata-store.md` contains the API example; the [metadata model page](Data-Model-and-Provenance#local-metadata-implementation) records the publication-safe contract and limits.
+Use a trusted absolute local database path, separate from the landing inventory, and close the store through its context manager. This is not a CLI or an access-controlled service. File attributes (6.2), archive behavior (6.4), access grants (6.5) and real pipeline integration remain pending. The [metadata-store guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/metadata-store.md) contains the API example; the [metadata model page](Data-Model-and-Provenance#local-metadata-implementation) records the contract and limits.
 
 Azure login, subscription discovery, provisioning, uploads, benchmarks and teardown remain paused. No local test establishes cloud readiness or authorizes any of those actions. No resources were created by these local changes; existing subscription charges are unknown. Proceeding to billable deployment requires a numeric spending limit plus a dated, region-specific estimate from approved sizing and a separately authorized deployment.
 
@@ -97,7 +97,7 @@ Do not archive the entire change because individual tasks are complete. Task 1.1
 
 ## Maintaining the Wiki
 
-The Markdown sources are under `docs/wiki` on the existing `docs/project-wiki` branch, reviewed through [draft PR #11](https://github.com/samueltauil/genomics-variant-analytics/pull/11); they are not yet on `main`. `Home.md` is the landing page; `_Sidebar.md` supplies navigation. Links without file extensions name wiki pages. Keep the sources reviewable through code-repository PRs; the wiki's Git history is separate and its direct edits do not pass through this repository's required checks.
+The Markdown sources are under `docs/wiki` on the existing `docs/project-wiki` branch, reviewed through [PR #11](https://github.com/samueltauil/genomics-variant-analytics/pull/11); they are not yet on `main`. The live wiki is already populated. `Home.md` is the landing page; `_Sidebar.md` supplies navigation. Links without file extensions name wiki pages. Keep the sources reviewable through code-repository PRs; the wiki's Git history is separate and its direct edits do not pass through this repository's required checks.
 
 GitHub must have an initial wiki page before its separate Git remote is available. Once `Home` has been created in the signed-in web UI:
 
