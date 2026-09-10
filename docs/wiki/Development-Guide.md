@@ -1,6 +1,6 @@
 # Development Guide
 
-The published baseline includes repository data hygiene. Earlier local infrastructure validation, write-test tooling and landing inventory are recorded in development commit `d89796e`. New completeness and reference-submission changes remain uncommitted as of 2026-09-10. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
+The published baseline includes repository data hygiene. Earlier local infrastructure validation, write-test tooling and landing inventory are recorded in development commit `d89796e`. New completeness, reference-submission and metadata-model changes remain uncommitted as of 2026-09-10. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
 
 ## Local Checks
 
@@ -20,7 +20,7 @@ Fetch the current target branch before the comparison and substitute it for `ori
 | `1` | A policy violation was found |
 | `2` | Inspection could not complete; do not treat this as a pass |
 
-The original published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The expanded local working tree passes **63 tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness and 12 submission tests. Strict OpenSpec validation also passes. No remote CI result is claimed for the new uncommitted implementation. Fixtures must never contain biological data, real identifiers, or credentials.
+The original published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The expanded local working tree passes **76 tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness, 12 submission and 13 metadata tests. Strict OpenSpec validation also passes. No remote CI result is claimed for the new uncommitted implementation. Fixtures must never contain biological data, real identifiers, or credentials.
 
 ## Local-Only Implementation
 
@@ -58,6 +58,14 @@ The new `scripts/validate_submission.py` CLI accepts three trusted local JSON pa
 
 The Python `submit_run` API validates before calling an injected allocator. Twelve synthetic tests verify this ordering and rejection cases. Task 4.3 remains pending until the real workflow uses the gate with a trusted published inventory. Payload checksums, availability, scientific compatibility, attestation and cloud access are not established by placeholder test manifests. See the uncommitted `docs/reference-submission.md` for full schemas and examples.
 
+The local `scripts.metadata_store.MetadataStore` Python API implements tasks 6.1 and 6.3 with synthetic entity identifiers and typed parent links. It persists full-chain ancestry in SQLite, rejects missing parents without partial writes, and returns snapshot-consistent forward/backward traces. Thirteen tests cover these rules and shared ancestry, persistence and path guards:
+
+```powershell
+python -m unittest discover -s tests -p test_metadata_store.py -v
+```
+
+Use a trusted absolute local database path, separate from the landing inventory, and close the store through its context manager. This is not a CLI or an access-controlled service. File attributes (6.2), archive behavior (6.4), access grants (6.5) and real pipeline integration remain pending. The uncommitted `docs/metadata-store.md` contains the API example; the [metadata model page](Data-Model-and-Provenance#local-metadata-implementation) records the publication-safe contract and limits.
+
 Azure login, subscription discovery, provisioning, uploads, benchmarks and teardown remain paused. No local test establishes cloud readiness or authorizes any of those actions. No resources were created by these local changes; existing subscription charges are unknown. Proceeding to billable deployment requires a numeric spending limit plus a dated, region-specific estimate from approved sizing and a separately authorized deployment.
 
 ## OpenSpec Workflow
@@ -76,7 +84,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Consult those PRs for current review state. Tasks 2.1 and 2.2 have 21 local synthetic tests covering discovery, metadata, persistence, slow writes and marker/stability behavior. The local record is **4/89 completed**, with 85 pending; default-branch checkboxes remain stale. Cloud deployment and SMB acceptance are not implied by local completion.
+Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Consult those PRs for current review state. Tasks 2.1 and 2.2 have 21 local synthetic tests covering discovery, metadata, persistence, slow writes and marker/stability behavior; tasks 6.1 and 6.3 have 13 synthetic lineage/integrity tests. The local record is **6/89 completed**, with 83 pending; default-branch checkboxes remain stale. Cloud deployment and SMB acceptance are not implied by local completion.
 
 ## Practical Lessons
 

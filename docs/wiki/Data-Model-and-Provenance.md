@@ -1,6 +1,6 @@
 # Data Model and Provenance
 
-**Specified contract, not an implemented database.** This page is an orientation to the variant-store and metadata specifications. Read the linked specs before choosing schemas, ingestion libraries, or physical table layouts.
+**Variant store specified; metadata lineage implemented locally as of 2026-09-10.** This page distinguishes the planned variant store from the synthetic SQLite lineage model. The new metadata implementation remains uncommitted and is not a deployed service. Read the linked specs before choosing ingestion libraries or physical table layouts.
 
 ## Variant Records
 
@@ -48,6 +48,24 @@ research subject -> sample -> sequencing run -> source file
 Reference manifests and pipeline versions supply the additional context needed to interpret and reproduce the processing run. A result must resolve to its source file, processing version, and reference build rather than relying on a catalog entry alone.
 
 `research_subject_id` is not an authorization grant. The planned de-identified query surface must withhold identity-linked information according to the caller's tier. Do not assume pseudonymous identifiers make unrestricted access acceptable.
+
+## Local Metadata Implementation
+
+Tasks 6.1 and 6.3 now have a persistent SQLite model with 13 passing synthetic tests. Entities carry an immutable, globally unique identifier and kind; identifiers match `SYN-[A-Z0-9][A-Z0-9_-]*`. Links preserve this chain:
+
+```text
+subject -> sample -> sequencing_run -> fastq -> bam/cram -> vcf/gvcf -> variant
+```
+
+Samples have one subject; FASTQ artifacts have one sequencing run; variant occurrences have one source VCF/GVCF. Runs can have multiple sample parents, alignments multiple FASTQ parents, and joint VCFs multiple alignment parents. Every parent must already exist and match the allowed stage. Atomic inserts reject missing parents, duplicates and invalid transitions. Database foreign keys prevent dangling links through the store connection. There is no replace or delete API.
+
+`MetadataStore.trace_subject` returns descendants and `trace_variant` returns ancestors, including the root, sorted entities and links, deduplicated shared nodes and a consistent database snapshot. Tests cover both full-chain directions, BAM/CRAM and VCF/GVCF alternatives, branches, missing-sample rejection, persistence and a concurrent append between trace queries. No genomic payload is opened.
+
+This is artifact ancestry, not sample-genotype assignment: a multiplexed run or joint-call VCF can have several contributing samples. Reachability does not prove an allele belongs to all of them. Sample-specific genotype attribution and demultiplexing provenance require later integration. Test fixtures are invented metadata, not the future Platinum Genomes demo dataset or actual pipeline outputs.
+
+The API requires a trusted absolute local database path, separate from scanner inventory. It rejects network/redirect paths using the shared local-path guard and rejects foreign database schemas. It accepts no clinical attributes, but returns subject linkage: **do not expose it to analysts or treat it as access-controlled**. Identifier syntax is not PHI detection, and direct database access can bypass application rules. Protect files and reports with local filesystem controls.
+
+Task 6.2's file URI, producing workflow run and integrity fields, task 6.4's archive behavior, task 6.5's clinical/research grants, audit and Delta/Purview integration remain pending. Trace responses declare `mode: local-only` and `azure_readiness: not-evaluated`. Current code and usage are in the uncommitted development files `scripts/metadata_store.py`, `tests/test_metadata_store.py` and `docs/metadata-store.md`; this wiki publication does not publish those files.
 
 ## Versioning and Retention
 
