@@ -1,6 +1,6 @@
 # Demo Readiness and Limitations
 
-**There is no runnable end-to-end demo as of 2026-09-10.** The current demonstration surface is repository guardrails and their synthetic tests. Storage, pipelines, variant tables, notebooks, visualizations, and deployment automation remain specified only.
+**There is no runnable end-to-end demo as of 2026-09-10.** Published demonstrations cover repository guardrails. Local infrastructure validation, write-smoke tooling and scheduled landing inventory also pass synthetic tests, but that implementation is uncommitted and unavailable from `main`. Storage services, processing pipelines, variant tables, notebooks, visualizations and deployment automation remain specified only.
 
 ## Readiness
 
@@ -9,11 +9,18 @@
 | Data-hygiene checker and trusted workflow | Implemented and live-tested |
 | Branch checks, review, and rejection tests | Verified; acceptance documentation in PR #10 awaiting review |
 | Secret push protection | Enabled; never-issued credential-pattern push rejected, evidence in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) awaiting review |
-| SMB landing zone and staging | Specified only |
+| Candidate asset inventory and validator | Implemented locally; no templates or approved infrastructure plan |
+| Write smoke test | Local hash/cleanup verified; no SMB throughput or IOPS acceptance |
+| Scheduled landing inventory (2.1) | 12 local tests pass; completeness and retry logic pending |
+| SMB service and staging | Specified only; no cloud deployment or connectivity acceptance |
 | Nextflow, Batch, and Slurm processing | Specified only |
 | Reference data, metadata, and Delta store | Specified only |
 | Access tiers, catalog integration, and analytics | Specified only |
 | Preflight, reset, teardown, and cost measurements | Not implemented or measured |
+
+The working-tree task record is **3/89 completed** (1.1, 1.2 and 2.1), and all **42 local tests pass**. This wiki update publishes documentation only, not those uncommitted code assets. See the [Development Guide](Development-Guide#local-only-implementation) for exact local scope.
+
+Azure authentication, account discovery, provisioning, uploads, live benchmarks and teardown are paused. Task 1.3's 100 GiB SMB measurement and IOPS verification remain pending. Local validation neither completes cloud acceptance nor authorizes cloud access; IaC generation still requires a researched resource list and concrete-plan approval.
 
 The [demo runbook](https://github.com/samueltauil/genomics-variant-analytics/blob/main/docs/demo-runbook.md) is a draft outline, not executable delivery instructions. Its planned phases are bring-up, seeding, presentation, rehearsed failures, reset, and teardown. Do not attempt a customer delivery from it.
 
