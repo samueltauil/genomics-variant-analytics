@@ -48,6 +48,14 @@ flowchart TD
 
 The proposed object-storage taxonomy is `Ingest`, `Process`, `Failed`, `External`, `Inventory`, `ReferenceData`, and `SampleData`, with genomics modality subfolders. These are downstream storage conventions, not a requirement to rename the laboratory's existing instrument folders.
 
+## Workload Context
+
+The [sourced genomics workload note](https://github.com/samueltauil/genomics-variant-analytics/blob/docs/project-wiki/docs/genomics-workload-context.md) captures the SPECstorage Solution 2020 User's Guide v1.2, reviewed 2026-09-10. The supplied PDF is not the SFS 2014 SP2 guide. The note is published on the documentation branch pending review, not yet on `main`.
+
+The guide's GENOMICS profile models whole-workflow storage behavior: 72% read, 9% write and 19% metadata operations by application-level operation count. This supports investigating read concurrency, shared references, scratch writes and small-file/metadata pressure in secondary analysis. It is not a per-stage trace of this accelerator, and synthetic JOBS cannot be converted into genomes, storage-service IOPS, resource sizes or cost per sample.
+
+Landing remains an ingestion boundary, with the existing 100 GiB sequential SMB write and provisioned-IOPS acceptance criteria unchanged. Future mixed-I/O tests would need calibration against the selected Nextflow workflow, with cache, working-set and data-reduction assumptions recorded. Delta query performance and scientific concordance require separate evaluations. The local repeated-buffer write harness is only a smoke test. No benchmark was run, no SPEC result is claimed, no task was completed by this context update, and Azure operations remain paused.
+
 ## Unresolved Choices
 
 The reference deployment's Delta engine, Fabric versus Databricks, is not selected. Whether annotation ships as a pipeline step or arrives in input VCFs is also open. Query performance, physical table layout, sizing, and cost must be measured during implementation; the diagram is not evidence that targets are met.
