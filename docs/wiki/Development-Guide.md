@@ -1,6 +1,6 @@
 # Development Guide
 
-The published executable surface is repository data hygiene. Additional infrastructure validation, write-test tooling and landing inventory have been implemented locally but are still uncommitted as of 2026-09-10. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
+The published baseline includes repository data hygiene. Earlier local infrastructure validation, write-test tooling and landing inventory are recorded in development commit `d89796e`. New completeness and reference-submission changes remain uncommitted as of 2026-09-10. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
 
 ## Local Checks
 
@@ -20,7 +20,7 @@ Fetch the current target branch before the comparison and substitute it for `ori
 | `1` | A policy violation was found |
 | `2` | Inspection could not complete; do not treat this as a pass |
 
-The published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The expanded local working tree passes **42 tests**: 12 hygiene, 18 infrastructure/write, and 12 landing-inventory tests. Strict OpenSpec validation also passes. No remote CI result is claimed for the uncommitted implementation. Fixtures must never contain biological data, real identifiers, or credentials.
+The original published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The expanded local working tree passes **63 tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness and 12 submission tests. Strict OpenSpec validation also passes. No remote CI result is claimed for the new uncommitted implementation. Fixtures must never contain biological data, real identifiers, or credentials.
 
 ## Local-Only Implementation
 
@@ -46,11 +46,19 @@ The first poll runs immediately, subsequent polls start after a post-scan delay,
 
 The default path convention is `SYN-RUN-001/Data/Intensities/BaseCalls/SYN-SAMPLE-001_S1_L001_R1_001.fastq.gz`. A full-path regex supplied through `--path-pattern` can extract named `run_id` and `sample_id` groups for other instrument layouts without renaming files. Unmatched names remain visible with null IDs and `metadata_error: unrecognized-path`.
 
-Arrival means first observation in UTC, not exact transfer start; it survives growth and restarts. Missing files retain history with `present: false`. All discovered files remain `arriving`: stability/marker detection (2.2), failed-transfer/retry handling (2.3) and staging are not implemented. Do not treat the inventory as permission to stage data.
+Arrival means first observation in UTC, not exact transfer start; it survives growth and restarts. Missing files retain history with `present: false`. A recognized file becomes `complete` after two consecutive successful polls with identical size/mtime, or when an explicitly configured fresh vendor marker is observed. Later changes revoke completeness. Unknown IDs, missing files and marker files themselves are not complete payloads. Reports use schema version 2 and `completeness_evaluated: true`.
 
-Both local tools reject UNC/device paths and symlink/reparse redirects; on Windows they require fixed local drives. These guards are not a sandbox against path races or every POSIX mount mechanism. Use synthetic data and trusted directories. Keep generated inventories outside Git; `.sqlite3` files and their sidecars are ignored in the implementation working tree. Detailed local usage is in `infra/README.md` and `docs/landing-inventory.md`, which are not yet published.
+Optionally supply `--completion-marker '{run_id}/RTAComplete.txt'` with a new inventory database. Templates accept `{run_id}`, `{sample_id}` and `{path}`; the marker must stay within the root and be at least as new as the payload. This is an opt-in example, not an assumed instrument convention. The root, parsing pattern and marker policy are bound to the database. Existing task 2.1 databases upgrade in place with markers disabled.
 
-Azure login, subscription discovery, provisioning, uploads, benchmarks and teardown remain paused. No local test establishes cloud readiness or authorizes any of those actions.
+Stability is not proof of success: a writer can pause or leave a truncated file. Task 2.3 requires trusted expected sizes/checksums or vendor failure signals and a timeout; that contract is unresolved. Failure/retry handling and staging remain pending. Do not treat this inventory as permission to stage data.
+
+Both landing tools reject UNC/device paths and symlink/reparse redirects; on Windows they require fixed local drives. These guards are not a sandbox against path races or every POSIX mount mechanism. Use synthetic data and trusted directories. Keep generated inventories outside Git; `.sqlite3` files and their sidecars are ignored. Detailed current usage is in the development working tree's `infra/README.md` and `docs/landing-inventory.md`.
+
+The new `scripts/validate_submission.py` CLI accepts three trusted local JSON paths through `--request`, `--compatibility` and `--inventory`. It requires an exact workflow version, one explicit genome version and the complete compatible annotation set. Missing or incompatible versions fail without a default build. URI/checksum metadata and canonical-JSON manifest digests are pinned in its output; URIs are not resolved or downloaded. It always reports `compute_allocated: false` and `azure_readiness: not-evaluated`.
+
+The Python `submit_run` API validates before calling an injected allocator. Twelve synthetic tests verify this ordering and rejection cases. Task 4.3 remains pending until the real workflow uses the gate with a trusted published inventory. Payload checksums, availability, scientific compatibility, attestation and cloud access are not established by placeholder test manifests. See the uncommitted `docs/reference-submission.md` for full schemas and examples.
+
+Azure login, subscription discovery, provisioning, uploads, benchmarks and teardown remain paused. No local test establishes cloud readiness or authorizes any of those actions. No resources were created by these local changes; existing subscription charges are unknown. Proceeding to billable deployment requires a numeric spending limit plus a dated, region-specific estimate from approved sizing and a separately authorized deployment.
 
 ## OpenSpec Workflow
 
@@ -68,7 +76,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Both are pending review as of 2026-09-10. Task 2.1 is verified by 12 local synthetic tests, including scheduled discovery, metadata fields, persistence and failure guards. The local record is **3/89 completed**, with 86 pending; default-branch checkboxes remain stale. Cloud deployment and SMB acceptance are not implied by the scanner's local completion.
+Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Consult those PRs for current review state. Tasks 2.1 and 2.2 have 21 local synthetic tests covering discovery, metadata, persistence, slow writes and marker/stability behavior. The local record is **4/89 completed**, with 85 pending; default-branch checkboxes remain stale. Cloud deployment and SMB acceptance are not implied by local completion.
 
 ## Practical Lessons
 
