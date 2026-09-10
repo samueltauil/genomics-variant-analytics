@@ -3,7 +3,7 @@
 **Sequencer → governed variant store on Azure.** Keep the laboratory's SMB write path untouched while moving storage, compute, governance, and analytics into Azure, ending in a Delta-based variant store that is queryable and traceable to its source files.
 
 > **Status: implementation started. Nothing here is deployable yet.**
-> The repository data-hygiene checker and workflows are installed. Required checks, independent PR review, and administrator rejection tests are verified on `main`; see the [acceptance record](CONTRIBUTING.md#live-acceptance-record-2026-09-10). No infrastructure, pipeline, or notebook code exists. See [Coverage](#coverage) for what that means in a customer conversation.
+> The repository data-hygiene checker and workflows are installed. Required checks, independent PR review, and administrator rejection tests are verified on `main`; see the [acceptance record](CONTRIBUTING.md#live-acceptance-record-2026-09-10). Secret scanning and push protection are enabled, with a [synthetic credential push rejected](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). No infrastructure, pipeline, or notebook code exists. See [Coverage](#coverage) for what that means in a customer conversation.
 
 ## What this is, and what it is not
 
@@ -70,7 +70,7 @@ Ten capability specs live in [openspec/](openspec/). Each is a behavior contract
 
 ## Coverage
 
-The engineering-workflow capability is **partially demonstrated**: its data-hygiene checker passes local synthetic tests, and live GitHub tests verify forbidden-file merge refusal and rejection of unreviewed administrator direct pushes. Secret push protection and the rest of the engineering workflow remain unverified. All other capabilities remain **specified only** in the demo environment.
+The engineering-workflow capability is **partially demonstrated**: its data-hygiene checker passes local synthetic tests, and live GitHub tests verify forbidden-file merge refusal, rejection of unreviewed administrator direct pushes, and push-time rejection of a recognized synthetic credential pattern. Secret protection does not detect every sensitive value and has explicit bypass flows; see its [acceptance record and limits](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). The rest of the engineering workflow remains unverified. All other capabilities remain **specified only** in the demo environment.
 
 | State | Meaning for a customer conversation |
 |---|---|
