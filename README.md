@@ -3,7 +3,7 @@
 **Sequencer → governed variant store on Azure.** Keep the laboratory's SMB write path untouched while moving storage, compute, governance, and analytics into Azure, ending in a Delta-based variant store that is queryable and traceable to its source files.
 
 > **Status: implementation started. Nothing here is deployable yet.**
-> The repository data-hygiene checker and workflows are installed. Required checks, independent PR review, and administrator rejection tests are verified on `main`; see the [acceptance record](CONTRIBUTING.md#live-acceptance-record-2026-09-10). Secret scanning and push protection are enabled, with a [synthetic credential push rejected](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). No infrastructure, pipeline, or notebook code exists. See [Coverage](#coverage) for what that means in a customer conversation.
+> The repository data-hygiene checker and workflows are installed. Required checks, independent PR review, and administrator rejection tests are verified on `main`; see the [acceptance record](CONTRIBUTING.md#live-acceptance-record-2026-09-10). Secret scanning and push protection are enabled, with a [synthetic credential push rejected](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). A [candidate infrastructure inventory and local-only validator](infra/README.md) and [scheduled local landing inventory](docs/landing-inventory.md) are available; IaC templates, processing pipelines and notebooks are not implemented. Azure operations are paused. See [Coverage](#coverage) for what that means in a customer conversation.
 
 ## What this is, and what it is not
 
@@ -80,9 +80,19 @@ The engineering-workflow capability is **partially demonstrated**: its data-hygi
 
 This table gets updated as capabilities are implemented. If it says specified only, do not demo it.
 
+The landing directory scanner has passed seeded local tests for task 2.1. This
+is not an SMB/cloud demonstration: completeness detection, failed-transfer
+handling and staging are not implemented. See [local inventory scope](docs/landing-inventory.md).
+
 ## Prerequisites
 
-A preflight check will verify these. Until it exists, treat this list as the manual version.
+For local infrastructure preparation, use PowerShell 7.2+, Python 3.10+ and Git;
+no Azure account or CLI is needed. See the [local commands](infra/README.md#run-locally).
+The [local write smoke test](infra/README.md#local-write-smoke-test) verifies
+synthetic write integrity and cleanup without using Azure or SMB.
+
+A future cloud preflight check will verify the following. It is not implemented
+or authorized in the current local-only phase; treat this list as planning input.
 
 - An Azure subscription you can create resources in, with the roles needed to assign RBAC and create federated credentials
 - Quota for the Batch or HPC pool sizing you intend to run
