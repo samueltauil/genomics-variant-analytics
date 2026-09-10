@@ -1,5 +1,7 @@
 ## 1. Repository guardrails and foundation
 
+Current policy update (2026-09-10): the user authorized a solo-maintainer policy. Required approval counts are now zero in both branch protection and the default-branch ruleset; strict required checks, the PR rule, administrator enforcement, resolved threads, and force-push/deletion restrictions remain. The independent-review/direct-push evidence below describes the earlier configuration, not the current guarantee: a green, already-open PR head can again permit an administrator fast-forward. No further control expansion is planned; implementation is the priority.
+
 Implementation note (2026-09-10): task 1.1 is complete. PR #1 installed the trusted data-hygiene workflow; `main` requires strict GitHub Actions checks and independent PR approval, including for administrators. Six isolated synthetic PRs failed the trusted policy and their merge API attempts were refused; an administrator direct push of a passing but unapproved PR head was also refused. The initial zero-approval fast-forward gap, corrective settings, run URLs, and pending test-PR closure submissions are recorded in [CONTRIBUTING.md](../../../CONTRIBUTING.md#live-acceptance-record-2026-09-10). All 12 local tests, actionlint 1.7.12, and strict OpenSpec validation pass. Task 1.2 is also complete: secret scanning and push protection were confirmed enabled, a harmless control push succeeded, and a never-issued PAT-shaped probe received an explicit GitHub push-protection rejection. The remote stayed unchanged and the disposable branch was removed; see the [secret-protection evidence](../../../CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). Cloud work remains unverified.
 
 Local-first phase (2026-09-10): Azure access, provisioning, uploads and live benchmarks are paused at the user's request. The [candidate infrastructure inventory and local validator](../../../infra/README.md) prepare asset dependencies and task traceability only; resource-list and plan approval are pending before IaC generation. No cloud task is complete on the strength of this local validation, and all existing acceptance criteria remain unchanged.
@@ -53,12 +55,14 @@ Task 4.3 preparation (2026-09-10): the [local submission gate](../../../docs/ref
 
 ## 6. Metadata store
 
+Tasks 6.2 and 6.4 verification (2026-09-10): 21 focused metadata tests pass. Every artifact in the synthetic local demo chains has a storage URI, typed analysis stage, existing producer run and explicit integrity result. Pipeline producers are registered separately from sequencing runs. File retrieval persists those fields; invalid metadata rolls back entity/link insertion, and legacy version-1 stores require explicit backfill without invented values. Metadata-only archival preserves URI, producer, integrity and variant ancestry, including across restarts and concurrent snapshot reads. No payloads were read or archived in storage; real pipeline execution and grants remain pending.
+
 Tasks 6.1 and 6.3 verification (2026-09-10): the [local metadata model](../../../docs/metadata-store.md) persists synthetic Subject/Sample/Run/artifact/variant-occurrence relationships in SQLite. Thirteen focused tests verify full-chain traversal in both directions, branching/shared ancestors, missing-sample rejection without partial writes, foreign keys, persistence and snapshot-consistent reads. This verifies the model using locally generated demo metadata, not the future Platinum Genomes dataset or pipeline integration. File attributes, archive semantics and access grants remain pending; the API is trusted local development code and must not be exposed as a governed query service. Task 2.3 remains blocked on transfer-failure evidence. No Azure operations were performed.
 
 - [x] 6.1 Model the Subject → Sample → Sequencing Run → FASTQ → BAM/CRAM → VCF → variant chain, and verify downward traversal from a subject and upward traversal from a variant both return the full chain for the demo data
-- [ ] 6.2 Populate file-level entries with storage URI, analysis stage, producing run, and integrity result, and verify every artifact of the demo run has all four populated
+- [x] 6.2 Populate file-level entries with storage URI, analysis stage, producing run, and integrity result, and verify every artifact of the demo run has all four populated
 - [x] 6.3 Enforce referential integrity on writes, and verify an entry referencing a non-existent sample is rejected
-- [ ] 6.4 Implement archive semantics, and verify archiving an artifact leaves referencing variant records resolving to a valid entry marked archived
+- [x] 6.4 Implement archive semantics, and verify archiving an artifact leaves referencing variant records resolving to a valid entry marked archived
 - [ ] 6.5 Split clinical from research metadata behind separate grants, and verify a research-only principal reads research attributes and receives no clinical attributes
 
 ## 7. Delta variant store

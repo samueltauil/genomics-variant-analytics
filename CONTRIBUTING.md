@@ -38,6 +38,13 @@ If your change alters observable behavior and the spec does not move, the review
 
 ## Pull requests
 
+Current policy (2026-09-10): the maintainer authorized zero required approvals
+to support solo development. PRs, strict passing checks, administrator
+enforcement and resolved review threads remain required. Historical
+independent-review and administrator direct-push rejection evidence below
+describes the earlier configuration. A green, already-open PR head may again
+allow an administrator fast-forward; no stronger direct-push guarantee is made.
+
 - One concern per pull request
 - Say what you verified and how — every task in this repository carries a verification condition, and reviews expect the same
 - Automated review runs first on workflow, container, manifest, and schema paths; a reference-build change without a version bump, or a schema change without a matching spec change, gets flagged

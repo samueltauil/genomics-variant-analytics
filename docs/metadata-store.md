@@ -1,7 +1,7 @@
 # Local Genomic Metadata Store
 
-The local SQLite model implements tasks 6.1 and 6.3: bidirectional lineage
-and referential integrity. It is a trusted, single-machine development API,
+The local SQLite model implements tasks 6.1 through 6.4: bidirectional lineage,
+file metadata, referential integrity and archival. It is a trusted, single-machine development API,
 not a deployed service, governed query endpoint or Delta variant store.
 No Azure account, network connection or genomic payload is needed.
 
@@ -24,7 +24,8 @@ Variant entities identify record occurrences, not globally deduplicated alleles.
 
 Every parent must exist before insertion. Inserts add the entity and all links
 in one transaction; missing parents, duplicate identifiers and invalid stage
-transitions are rejected. No replace, update or delete API is exposed. SQLite
+transitions are rejected. File details and links are immutable; only the archive
+flag can change. No replace or delete API is exposed. SQLite
 foreign keys are enabled on every store connection and restrict deletion of
 referenced entities. Callers bypassing this API can alter the database; these
 checks are not an authorization or tamper-resistance boundary.
@@ -40,6 +41,44 @@ include the requested root, deduplicate shared nodes, return deterministically
 sorted entities and links, and read one consistent database snapshot. Unknown
 or incorrectly typed roots raise `ValueError`. A disconnected subject is not
 included, nor is a sibling variant when tracing upward from another variant.
+
+## File Details And Archival
+
+Every new `fastq`, `bam`, `cram`, `vcf` or `gvcf` entity requires a
+`file_metadata` dictionary with these fields:
+
+| Field | Contract |
+| --- | --- |
+| `storage_uri` | Absolute `file`, `https` or `abfss` URI without credentials, query or fragment; recorded only, never opened |
+| `analysis_stage` | `sequencing` for FASTQ, `alignment` for BAM/CRAM, `variant-calling` for VCF/GVCF |
+| `producing_run` | Existing sequencing-run parent for FASTQ; registered pipeline-run ID for processed artifacts |
+| `integrity_result` | Explicit `passed`, `failed` or `not-checked`; caller-reported, not verified by this API |
+| `sha256` | Optional 64-character lowercase hexadecimal digest; recorded, not computed |
+
+Sequencing-run producers are registered automatically. Register processing runs
+with `add_pipeline_run(run_id, workflow_id, workflow_version)` before inserting
+their artifacts. This registry records a producer identity and workflow version,
+not the complete execution provenance or submission integration from task 5.5.
+It does not establish that a pipeline actually ran or used the declared inputs.
+
+`get_artifact(entity_id)` returns the file fields, kind, workflow identity and
+version (null for sequencing runs), and an `archived` boolean. Invalid metadata
+rolls back the entire entity and its parent links. File details cannot be
+attached to subjects, samples, runs or individual variant records.
+
+`archive_artifact(entity_id)` idempotently sets `archived` to true. URI,
+producer, integrity fields and lineage links remain unchanged. Both trace
+directions expose the flag in schema-version-2 entity records; archived
+ancestors still resolve. This is metadata archival, not file deletion, blob
+tiering, retention enforcement or access revocation. Legacy artifacts require
+file-detail backfill before archival. There is no unarchive operation.
+
+Opening a schema-version-1 database upgrades it transactionally to version 2
+without fabricating missing file details. Its lineage remains readable.
+`get_artifact` rejects a legacy file until `backfill_file_metadata(entity_id,
+metadata)` supplies validated details, once only. Register its pipeline producer
+first when applicable. New file entries cannot omit details. Back up existing
+databases before upgrading; older code cannot open the upgraded schema.
 
 ## Use Locally
 
@@ -62,11 +101,23 @@ with tempfile.TemporaryDirectory() as directory:
         store.add_entity("SYN-SUBJECT-001", "subject")
         store.add_entity("SYN-SAMPLE-001", "sample", ["SYN-SUBJECT-001"])
         store.add_entity("SYN-RUN-001", "sequencing_run", ["SYN-SAMPLE-001"])
-        store.add_entity("SYN-FASTQ-001", "fastq", ["SYN-RUN-001"])
-        store.add_entity("SYN-BAM-001", "bam", ["SYN-FASTQ-001"])
-        store.add_entity("SYN-VCF-001", "vcf", ["SYN-BAM-001"])
+        store.add_pipeline_run("SYN-PIPELINE-001", "synthetic-workflow", "1.0")
+        for identifier, kind, parent, stage, producer in (
+            ("SYN-FASTQ-001", "fastq", "SYN-RUN-001", "sequencing", "SYN-RUN-001"),
+            ("SYN-BAM-001", "bam", "SYN-FASTQ-001", "alignment", "SYN-PIPELINE-001"),
+            ("SYN-VCF-001", "vcf", "SYN-BAM-001", "variant-calling", "SYN-PIPELINE-001"),
+        ):
+            store.add_entity(identifier, kind, [parent], file_metadata={
+                "storage_uri": f"file:///synthetic/{identifier}.{kind}",
+                "analysis_stage": stage,
+                "producing_run": producer,
+                "integrity_result": "not-checked",
+            })
         store.add_entity("SYN-VARIANT-001", "variant", ["SYN-VCF-001"])
         assert len(store.trace_subject("SYN-SUBJECT-001")["entities"]) == 7
+        assert len(store.trace_variant("SYN-VARIANT-001")["links"]) == 6
+        store.archive_artifact("SYN-VCF-001")
+        assert store.get_artifact("SYN-VCF-001")["archived"]
         assert len(store.trace_variant("SYN-VARIANT-001")["links"]) == 6
 ```
 
@@ -79,15 +130,16 @@ store connection per thread. This module is a Python API, not a CLI.
 python -m unittest discover -s tests -p test_metadata_store.py -v
 ```
 
-Thirteen tests cover full-chain traversal in both directions, BAM/CRAM and
+Twenty-one tests cover full-chain traversal in both directions, BAM/CRAM and
 VCF/GVCF alternatives, shared ancestors, multiplexed runs, unrelated branches,
 atomic rejection of a missing sample, stage and identifier validation, database
 foreign keys, persistence, path guards and snapshot consistency during a write.
+They also cover complete file-detail retrieval, invalid metadata rollback,
+producer typing, legacy backfill, archival, and concurrent archive/read behavior.
 Fixtures are synthetic metadata generated in temporary directories, not the
 future Platinum Genomes demo dataset or actual pipeline outputs.
 
-File URI, producing workflow run and integrity attributes (6.2), archive
-semantics (6.4), clinical/research grants (6.5), subject-linkage authorization,
+Clinical/research grants (6.5), subject-linkage authorization,
 audit and Delta/Purview integration remain pending. This API returns subject
 linkage and must not be exposed to analysts. Protect the database and any
 printed reports with local filesystem controls. Graph reachability does not

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.metadata_store import MetadataStore
+from scripts.metadata_store import FILE_STAGES, MetadataStore
 
 
 class MetadataStoreTests(unittest.TestCase):
@@ -16,7 +16,22 @@ class MetadataStoreTests(unittest.TestCase):
         self.store = MetadataStore(self.database)
         self.addCleanup(self.store.close)
 
+    def file_details(self, entity_id, kind, run_id="SYN-PIPELINE-001"):
+        return {
+            "storage_uri": f"file:///synthetic/{entity_id}.{kind}",
+            "analysis_stage": FILE_STAGES[kind],
+            "producing_run": run_id,
+            "integrity_result": "not-checked",
+        }
+
+    def add_artifact(self, entity_id, kind, parents, run_id="SYN-PIPELINE-001"):
+        if kind == "fastq":
+            run_id = parents[0]
+        self.store.add_entity(entity_id, kind, parents,
+                              file_metadata=self.file_details(entity_id, kind, run_id))
+
     def seed_chain(self, suffix="001", aligned_kind="bam", variant_kind="vcf"):
+        self.store.add_pipeline_run(f"SYN-PIPELINE-{suffix}", "synthetic-workflow", "1.0")
         chain = [
             (f"SYN-SUBJECT-{suffix}", "subject"),
             (f"SYN-SAMPLE-{suffix}", "sample"),
@@ -28,7 +43,10 @@ class MetadataStoreTests(unittest.TestCase):
         ]
         parents = ()
         for entity_id, kind in chain:
-            self.store.add_entity(entity_id, kind, parents)
+            if kind in FILE_STAGES:
+                self.add_artifact(entity_id, kind, parents, f"SYN-PIPELINE-{suffix}")
+            else:
+                self.store.add_entity(entity_id, kind, parents)
             parents = (entity_id,)
         return {entity_id for entity_id, _ in chain}
 
@@ -63,9 +81,9 @@ class MetadataStoreTests(unittest.TestCase):
     def test_multiple_inputs_are_deduplicated_and_joint_ancestry_is_preserved(self):
         first = self.seed_chain()
         second = self.seed_chain("002")
-        self.store.add_entity("SYN-FASTQ-MATE", "fastq", ["SYN-RUN-001"])
-        self.store.add_entity("SYN-MERGED-BAM", "bam", ["SYN-FASTQ-001", "SYN-FASTQ-MATE"])
-        self.store.add_entity("SYN-JOINT-VCF", "vcf", ["SYN-MERGED-BAM", "SYN-ALIGNED-002"])
+        self.add_artifact("SYN-FASTQ-MATE", "fastq", ["SYN-RUN-001"])
+        self.add_artifact("SYN-MERGED-BAM", "bam", ["SYN-FASTQ-001", "SYN-FASTQ-MATE"])
+        self.add_artifact("SYN-JOINT-VCF", "vcf", ["SYN-MERGED-BAM", "SYN-ALIGNED-002"])
         self.store.add_entity("SYN-JOINT-VARIANT", "variant", ["SYN-JOINT-VCF"])
         report = self.store.trace_variant("SYN-JOINT-VARIANT")
         identifiers = [entry["entity_id"] for entry in report["entities"]]
@@ -165,6 +183,144 @@ class MetadataStoreTests(unittest.TestCase):
                                   (self.store.trace_subject, "SYN-VARIANT-001")):
             with self.subTest(identifier=identifier), self.assertRaises(ValueError):
                 trace(identifier)
+
+    def test_every_artifact_has_persisted_file_details_without_payload_access(self):
+        with patch.object(Path, "open", side_effect=AssertionError("No payload reads")):
+            self.seed_chain()
+            self.seed_chain("002", aligned_kind="cram", variant_kind="gvcf")
+            for subject in ("SYN-SUBJECT-001", "SYN-SUBJECT-002"):
+                for entity in self.store.trace_subject(subject)["entities"]:
+                    if entity["kind"] not in FILE_STAGES:
+                        continue
+                    artifact = self.store.get_artifact(entity["entity_id"])
+                    for field in ("storage_uri", "analysis_stage", "producing_run", "integrity_result"):
+                        self.assertTrue(artifact[field])
+                    self.assertEqual(artifact["analysis_stage"], FILE_STAGES[entity["kind"]])
+                    with MetadataStore(self.database) as reopened:
+                        self.assertEqual(reopened.get_artifact(entity["entity_id"]), artifact)
+
+    def test_invalid_file_metadata_rolls_back_artifact_and_links(self):
+        self.seed_chain()
+        valid = self.file_details("SYN-NEW", "bam")
+        cases = [None, {}, {**valid, "unexpected": 1}]
+        cases.extend({**valid, "storage_uri": uri} for uri in (
+            "relative.bam", "file:relative.bam", "http://synthetic.invalid/file",
+            "https://user:secret@synthetic.invalid/file", "https://synthetic.invalid/file?sig=secret",
+            "https://synthetic.invalid/file#fragment", "file://remote.invalid/share/file",
+            "file:///synthetic/%2e%2e/file", "https://synthetic.invalid/white space",
+        ))
+        cases.extend({**valid, field: value} for field, value in (
+            ("analysis_stage", "sequencing"), ("integrity_result", "maybe"),
+            ("sha256", "invalid"), ("sha256", None),
+            ("producing_run", "SYN-MISSING"), ("producing_run", "SYN-RUN-001"),
+        ))
+        before = self.store.trace_subject("SYN-SUBJECT-001")
+        for metadata in cases:
+            with self.subTest(metadata=metadata), self.assertRaises(ValueError):
+                self.store.add_entity("SYN-NEW", "bam", ["SYN-FASTQ-001"], file_metadata=metadata)
+            self.assertEqual(self.store.trace_subject("SYN-SUBJECT-001"), before)
+        with self.assertRaises(ValueError):
+            self.store.add_entity("SYN-SUBJECT-NEW", "subject", file_metadata=valid)
+
+    def test_file_integrity_results_and_uris_are_recorded_not_inferred(self):
+        self.seed_chain()
+        for index, result in enumerate(("passed", "failed", "not-checked")):
+            entity_id = f"SYN-FILE-{index}"
+            metadata = self.file_details(entity_id, "bam")
+            metadata.update(storage_uri=(
+                "file:///synthetic/output.bam", "https://synthetic.invalid/output.bam",
+                "abfss://container@synthetic.invalid/output.bam",
+            )[index], integrity_result=result, sha256="a" * 64)
+            self.store.add_entity(entity_id, "bam", ["SYN-FASTQ-001"], file_metadata=metadata)
+            artifact = self.store.get_artifact(entity_id)
+            for field, value in metadata.items():
+                self.assertEqual(artifact[field], value)
+            self.assertEqual(artifact["workflow_version"], "1.0")
+
+    def test_producing_runs_are_typed_existing_and_immutable(self):
+        self.seed_chain()
+        self.seed_chain("002")
+        for run_id in ("SYN-RUN-002", "SYN-PIPELINE-001"):
+            with self.subTest(run_id=run_id), self.assertRaises(ValueError):
+                self.store.add_entity("SYN-NEW", "fastq", ["SYN-RUN-001"],
+                                      file_metadata=self.file_details("SYN-NEW", "fastq", run_id))
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.add_pipeline_run("SYN-PIPELINE-001", "replacement", "2.0")
+        with self.assertRaises(ValueError):
+            self.store.add_pipeline_run("SYN-SAMPLE-001", "workflow", "1.0")
+        with self.assertRaises(ValueError):
+            self.store.add_entity("SYN-PIPELINE-001", "subject")
+        with self.assertRaises(sqlite3.IntegrityError), self.store._connection:
+            self.store._connection.execute("DELETE FROM producing_runs WHERE run_id = 'SYN-PIPELINE-001'")
+
+    def test_legacy_metadata_requires_explicit_write_once_backfill(self):
+        self.seed_chain()
+        before = self.store.trace_variant("SYN-VARIANT-001")
+        self.store.close()
+        with closing(sqlite3.connect(self.database)) as connection:
+            connection.execute("DROP TABLE file_metadata")
+            connection.execute("DROP TABLE producing_runs")
+            connection.execute("PRAGMA user_version = 1")
+        with MetadataStore(self.database) as legacy:
+            self.assertEqual(legacy.trace_variant("SYN-VARIANT-001"), before)
+            with self.assertRaisesRegex(ValueError, "backfill"):
+                legacy.get_artifact("SYN-FASTQ-001")
+            metadata = self.file_details("SYN-FASTQ-001", "fastq", "SYN-RUN-001")
+            legacy.backfill_file_metadata("SYN-FASTQ-001", metadata)
+            self.assertEqual(legacy.get_artifact("SYN-FASTQ-001")["producing_run"], "SYN-RUN-001")
+            with self.assertRaises(sqlite3.IntegrityError):
+                legacy.backfill_file_metadata("SYN-FASTQ-001", metadata)
+            for identifier in ("SYN-MISSING", "SYN-SUBJECT-001"):
+                with self.subTest(identifier=identifier), self.assertRaises(ValueError):
+                    legacy.backfill_file_metadata(identifier, metadata)
+
+    def test_archiving_preserves_variant_resolution_and_file_metadata(self):
+        self.seed_chain()
+        before = self.store.get_artifact("SYN-VCF-001")
+        trace = self.store.trace_variant("SYN-VARIANT-001")
+        with patch.object(Path, "unlink", side_effect=AssertionError("No payload deletion")):
+            self.store.archive_artifact("SYN-VCF-001")
+            self.store.archive_artifact("SYN-VCF-001")
+        self.assertEqual(self.store.get_artifact("SYN-VCF-001"), {**before, "archived": True})
+        for report in (self.store.trace_variant("SYN-VARIANT-001"),
+                       self.store.trace_subject("SYN-SUBJECT-001")):
+            self.assertEqual(report["links"], trace["links"])
+            self.assertEqual(len(report["entities"]), 7)
+            self.assertEqual([entity["entity_id"] for entity in report["entities"] if entity["archived"]],
+                             ["SYN-VCF-001"])
+        with MetadataStore(self.database) as reopened:
+            self.assertTrue(reopened.get_artifact("SYN-VCF-001")["archived"])
+            self.assertEqual(reopened.trace_variant("SYN-VARIANT-001"),
+                             self.store.trace_variant("SYN-VARIANT-001"))
+
+    def test_archiving_rejects_unknown_and_nonfile_entities(self):
+        self.seed_chain()
+        before = self.store.trace_variant("SYN-VARIANT-001")
+        for entity_id in ("SYN-MISSING", "SYN-SUBJECT-001", "SYN-VARIANT-001", "SYN-PIPELINE-001"):
+            with self.subTest(entity_id=entity_id), self.assertRaises(ValueError):
+                self.store.archive_artifact(entity_id)
+        self.assertEqual(self.store.trace_variant("SYN-VARIANT-001"), before)
+
+    def test_archive_during_trace_does_not_mix_read_snapshots(self):
+        self.seed_chain()
+        self.store._connection.execute("PRAGMA journal_mode = WAL")
+        with MetadataStore(self.database) as writer:
+            archived = False
+
+            def archive_between_queries(statement):
+                nonlocal archived
+                if "SELECT parent_id, child_id FROM links" in statement and not archived:
+                    archived = True
+                    writer.archive_artifact("SYN-VCF-001")
+
+            self.store._connection.set_trace_callback(archive_between_queries)
+            try:
+                report = self.store.trace_variant("SYN-VARIANT-001")
+            finally:
+                self.store._connection.set_trace_callback(None)
+        self.assertTrue(archived)
+        self.assertFalse(any(entity["archived"] for entity in report["entities"]))
+        self.assertTrue(self.store.get_artifact("SYN-VCF-001")["archived"])
 
     def test_foreign_database_and_network_paths_are_rejected(self):
         foreign = self.database.parent / "foreign.sqlite3"
