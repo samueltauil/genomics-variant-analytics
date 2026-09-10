@@ -80,9 +80,16 @@ The engineering-workflow capability is **partially demonstrated**: its data-hygi
 
 This table gets updated as capabilities are implemented. If it says specified only, do not demo it.
 
-The landing directory scanner has passed seeded local tests for task 2.1. This
-is not an SMB/cloud demonstration: completeness detection, failed-transfer
-handling and staging are not implemented. See [local inventory scope](docs/landing-inventory.md).
+The landing directory scanner has passed seeded local tests for tasks 2.1 and
+2.2, including size/mtime stability and optional completion markers. This is not
+an SMB/cloud demonstration; failed-transfer handling and staging remain pending.
+See [local inventory scope](docs/landing-inventory.md). An executor-independent
+[reference submission gate](docs/reference-submission.md) rejects incompatible
+build/annotation versions locally; actual workflow integration is still pending.
+The [local metadata model](docs/metadata-store.md) passes synthetic tests for
+bidirectional lineage and referential integrity (tasks 6.1 and 6.3). It is not
+an access-controlled service; file attributes, archive semantics and integration
+with pipeline outputs remain pending. OpenSpec progress is 6/89 tasks complete.
 
 ## Prerequisites
 
@@ -101,6 +108,11 @@ or authorized in the current local-only phase; treat this list as planning input
 - A GitHub account for forking
 
 ## Cost
+
+Azure access and provisioning remain paused. No cloud resources were created or
+charged by the local implementation commands. Before any billable action, a
+dated, region-specific estimate based on approved sizing and an explicit spending
+limit are required. Local checks are not a deployment authorization.
 
 Not yet estimated. Once provisioning exists, this section will state per-delivery cost, idle cost, the resources that dominate each, and the date and region the estimate was produced for.
 

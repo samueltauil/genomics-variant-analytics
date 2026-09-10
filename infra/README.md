@@ -50,7 +50,7 @@ DeploymentSupported: false
 It does not compile Bicep, validate ARM schemas, check regional availability,
 calculate costs, prove RBAC or connectivity, or establish deployment readiness.
 The existing repository test workflow discovers the new synthetic tests; local
-success is not evidence of a remote CI run for these uncommitted changes.
+success is not evidence of a remote CI run for the current changes.
 
 ## Local Write Smoke Test
 
@@ -148,9 +148,34 @@ authorization, and add no automatic deployment trigger.
 
 ## Deferred Acceptance
 
-OpenSpec progress is **3/89 completed tasks**, including the separately implemented
-[local scheduled inventory](../docs/landing-inventory.md) in task 2.1. This preparation does not
+OpenSpec progress is **6/89 completed tasks**, including the separately implemented
+[local scheduled inventory and completeness checks](../docs/landing-inventory.md)
+in tasks 2.1 and 2.2 and [local metadata lineage/integrity](../docs/metadata-store.md)
+in tasks 6.1 and 6.3. The [local reference submission gate](../docs/reference-submission.md)
+prepares task 4.3 but is not connected to a real workflow or published reference inventory.
+This preparation does not
 complete tasks 1.3 or 1.4, or any cloud acceptance task. The 100 GiB SMB benchmark,
 observed IOPS ceiling, directory/ACL tests, denied-access cases, repeat deployment,
 reset, teardown and cost measurements remain pending. No live guarantee of
 performance, security, availability, compliance or idempotency is claimed.
+
+## Remaining Implementation Gates
+
+The request to implement the remaining work without excessive subscription spend
+does not establish a currency, limit, region or approved resource plan. Azure
+access remains paused; no account discovery is needed to run the local tests.
+
+| Work | Required input before continuation |
+| --- | --- |
+| Failed transfer and staging (2.3, 3.x) | Trusted expected size/checksum or vendor transfer-status contract; stability alone also accepts paused/truncated writes |
+| Reference/pipeline integration (4.x, 5.x) | Published checksum inventory, reviewed workflow/build/annotation compatibility, actual Nextflow pipeline and a defined concordance threshold |
+| Infrastructure and live acceptance | Reviewed resource list and concrete plan, region, sizing, numeric per-delivery/idle spending limits, and separate deployment authorization |
+| Variant store and governed analytics (6.x-9.x) | Fabric versus Databricks, annotation strategy and access/identity model; do not claim a local substitute proves service grants |
+| Releases and delivery (10.x-12.x) | Real pipeline artifacts and deployed acceptance evidence; do not publish fabricated releases, cost measurements or end-to-end KPIs |
+
+The validator has no deploy action. Neither executor is enabled automatically.
+Local tests generate tiny temporary synthetic fixtures, not downloaded genomes.
+Do not turn on both compute paths or a provisioned analytics service merely to
+advance task checkboxes. This is a local execution boundary, not a hard cap on
+other activity in a subscription. Existing Azure resources, if any, were not
+queried and their charges are unknown.

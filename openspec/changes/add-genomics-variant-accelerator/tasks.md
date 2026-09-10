@@ -15,10 +15,12 @@ Task 1.3 preparation: the [local write smoke harness](../../../infra/README.md#l
 
 ## 2. Landing zone behavior
 
-Task 2.1 verification (2026-09-10): [the local scheduled scanner](../../../docs/landing-inventory.md) inventories seeded synthetic run folders, persists first-observed arrivals across restarts, and reports run/sample IDs, sizes, timestamps and states. All 12 focused tests pass, including scheduled discovery, path guards and failed-scan snapshot preservation. This verifies the scan logic locally, not an Azure scheduler or SMB connectivity. Completeness and failed-transfer transitions remain tasks 2.2 and 2.3; all discovered files currently remain `arriving`.
+Task 2.1 verification (2026-09-10): [the local scheduled scanner](../../../docs/landing-inventory.md) inventories seeded synthetic run folders, persists first-observed arrivals across restarts, and reports run/sample IDs, sizes, timestamps and states. The original 12 focused tests passed, including scheduled discovery, path guards and failed-scan snapshot preservation. This verifies the scan logic locally, not an Azure scheduler or SMB connectivity.
+
+Task 2.2 verification (2026-09-10): 21 focused tests pass with the two-consecutive-observation size/mtime rule and optional root-relative vendor completion markers. A synthetic slow copy remains `arriving` during growth and becomes `complete` after stability; new changes revoke completeness. Stale markers, cross-run markers, missing files and unresolved identifiers are tested. Task 2.3 is blocked on a trustworthy transfer-failure contract: a paused or truncated transfer can look stable, so no automatic failure detection or staging authorization is claimed. No Azure operations were performed.
 
 - [x] 2.1 Implement the scheduled directory scan that inventories run folders, and verify it lists run and sample identifiers, sizes, arrival timestamps, and states for a seeded run
-- [ ] 2.2 Implement the completeness stability check (size and last-modified unchanged across two consecutive polls, or vendor completion marker), and verify a file copied slowly reports `arriving` until the copy ends and `complete` afterwards
+- [x] 2.2 Implement the completeness stability check (size and last-modified unchanged across two consecutive polls, or vendor completion marker), and verify a file copied slowly reports `arriving` until the copy ends and `complete` afterwards
 - [ ] 2.3 Implement failed-transfer detection and the retry path, and verify an interrupted transfer is marked `failed`, is excluded from staging, and that re-sending it replaces the failed entry without affecting sibling files in the run
 - [ ] 2.4 Restrict landing-zone data-plane access to the ingestion identity and the instrument service account, and verify a pipeline identity is denied a direct read of the share
 
@@ -31,6 +33,8 @@ Task 2.1 verification (2026-09-10): [the local scheduled scanner](../../../docs/
 - [ ] 3.5 Configure the Storage Actions task for blob-side lifecycle (tiering and index tags) on staged artifacts, and verify an artifact past the age threshold transitions tier while its URI and lineage link still resolve
 
 ## 4. Reference data
+
+Task 4.3 preparation (2026-09-10): the [local submission gate](../../../docs/reference-submission.md) validates exact workflow/build/annotation sets against a trusted inventory and pins manifest digests. Twelve synthetic tests pass, including proof that incompatible or unavailable references never call the allocator callback. The real Nextflow submission path and published reference inventory do not yet exist, so task 4.3 remains unchecked; no compute or reference downloads occurred.
 
 - [ ] 4.1 Publish GRCh38 and hg19 builds plus gene and transcript annotations into `ReferenceData` under `name/version` paths with a per-artifact checksum manifest, and verify the inventory listing returns type, name, and version for each entry
 - [ ] 4.2 Enforce write-once semantics on published reference versions, and verify a write targeting an existing published version is rejected while publishing a new version succeeds and leaves the prior version retrievable
@@ -49,9 +53,11 @@ Task 2.1 verification (2026-09-10): [the local scheduled scanner](../../../docs/
 
 ## 6. Metadata store
 
-- [ ] 6.1 Model the Subject → Sample → Sequencing Run → FASTQ → BAM/CRAM → VCF → variant chain, and verify downward traversal from a subject and upward traversal from a variant both return the full chain for the demo data
+Tasks 6.1 and 6.3 verification (2026-09-10): the [local metadata model](../../../docs/metadata-store.md) persists synthetic Subject/Sample/Run/artifact/variant-occurrence relationships in SQLite. Thirteen focused tests verify full-chain traversal in both directions, branching/shared ancestors, missing-sample rejection without partial writes, foreign keys, persistence and snapshot-consistent reads. This verifies the model using locally generated demo metadata, not the future Platinum Genomes dataset or pipeline integration. File attributes, archive semantics and access grants remain pending; the API is trusted local development code and must not be exposed as a governed query service. Task 2.3 remains blocked on transfer-failure evidence. No Azure operations were performed.
+
+- [x] 6.1 Model the Subject → Sample → Sequencing Run → FASTQ → BAM/CRAM → VCF → variant chain, and verify downward traversal from a subject and upward traversal from a variant both return the full chain for the demo data
 - [ ] 6.2 Populate file-level entries with storage URI, analysis stage, producing run, and integrity result, and verify every artifact of the demo run has all four populated
-- [ ] 6.3 Enforce referential integrity on writes, and verify an entry referencing a non-existent sample is rejected
+- [x] 6.3 Enforce referential integrity on writes, and verify an entry referencing a non-existent sample is rejected
 - [ ] 6.4 Implement archive semantics, and verify archiving an artifact leaves referencing variant records resolving to a valid entry marked archived
 - [ ] 6.5 Split clinical from research metadata behind separate grants, and verify a research-only principal reads research attributes and receives no clinical attributes
 
