@@ -38,7 +38,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because one task is complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); it is pending review as of 2026-09-10. All other tasks remain unverified.
+Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Both are pending review as of 2026-09-10. Two of 89 tasks are verified; all other tasks remain unverified. Default-branch task checkboxes remain stale until the evidence merges.
 
 ## Practical Lessons
 

@@ -8,7 +8,7 @@
 |---|---|
 | Data-hygiene checker and trusted workflow | Implemented and live-tested |
 | Branch checks, review, and rejection tests | Verified; acceptance documentation in PR #10 awaiting review |
-| Secret push protection | Acceptance not verified |
+| Secret push protection | Enabled; never-issued credential-pattern push rejected, evidence in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) awaiting review |
 | SMB landing zone and staging | Specified only |
 | Nextflow, Batch, and Slurm processing | Specified only |
 | Reference data, metadata, and Delta store | Specified only |

@@ -21,8 +21,9 @@ This is a reference architecture and demo accelerator, not a released Microsoft 
 - A Python/Git checker rejects genomic filename extensions, Git blobs over 1 MiB, and uninspectable submodules.
 - A trusted GitHub workflow inspects proposed Git objects without executing proposed code and posts the required `data-hygiene` status on the PR head.
 - Synthetic tests, required checks, independent review, and administrator rejection probes verify the repository guardrails.
+- Secret scanning and push protection are enabled; a never-issued credential-pattern push was rejected before advancing the remote branch.
 
-[PR #1](https://github.com/samueltauil/genomics-variant-analytics/pull/1) installed the implementation. [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10) records task 1.1's completed acceptance conditions and is still awaiting review as of the date above. The task checkbox on `main` will not reflect that record until the PR merges. Secret push protection and all cloud tasks remain unverified.
+[PR #1](https://github.com/samueltauil/genomics-variant-analytics/pull/1) installed the implementation. [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10) records task 1.1's acceptance; [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) adds task 1.2's secret-protection evidence. Both await review as of the date above. Two of 89 tasks are verified, but the task checkboxes on `main` remain stale until these records merge. All cloud tasks remain unverified.
 
 ## Sources of Truth
 

@@ -1,6 +1,6 @@
 # Repository Guardrails
 
-**Observed on 2026-09-10.** These controls apply to the public code repository's `main` branch. They are live GitHub settings, not settings inherited by cloning, forking, or editing its separate wiki.
+**Observed on 2026-09-10.** Branch review and required checks protect the public code repository's `main` branch. Repository secret push protection also applies to supported patterns pushed to other branches. These are live GitHub settings, not settings inherited by cloning, forking, or editing its separate wiki.
 
 ## Installed Controls
 
@@ -12,6 +12,7 @@
 | Administrators | Classic branch protection enforced |
 | Force pushes and deletion | Disabled for `main` |
 | Additional PR rule | Active default-branch ruleset `22782462`, resolved review threads required, no bypass actors |
+| Secret scanning and push protection | Both enabled before and after a live, no-bypass synthetic credential-pattern rejection test |
 
 The PR author cannot self-approve. [PR #1](https://github.com/samueltauil/genomics-variant-analytics/pull/1) installed the workflows; [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10) holds the detailed acceptance record and remains pending review as of the date above.
 
@@ -41,11 +42,19 @@ During the initial zero-approval configuration, GitHub accepted the empty commit
 
 Test PRs #3-#9 are unmerged and their closure submissions were still pending at the last verification. They are intentional probes, not proposed product changes; do not approve or merge them.
 
+## Secret Push Protection
+
+Task 1.2 was verified at 15:21 UTC on 2026-09-10 by a repository administrator. Secret scanning and repository push protection were already enabled; no setting was changed. A harmless control push succeeded, then a locally constructed, never-issued PAT-shaped value was rejected with `GH013`, `GITHUB PUSH PROTECTION`, and `GitHub Personal Access Token`. GitHub reported the probe commit `0308f7ce791ca7aa43f87fcf69c2eced402347ae` and `synthetic-push-protection.txt:1` in the push response.
+
+The remote stayed at harmless control commit `71ce48f5ee44c9b7e123be59208012a0c46f988a`. The disposable branch was deleted and its absence confirmed. No real credential was issued or used, no bypass was requested, and the fixture is not in the implementation history. The [redacted acceptance record](https://github.com/samueltauil/genomics-variant-analytics/blob/ae872112f936fc9e71621ab08f0fa7d70fb9c71e/CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10) includes the procedure, settings, commit IDs, and cleanup. [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) holds the record pending review.
+
+Detection was verified in the push response, not a Security-tab alert. Public-repository user push protection may overlap; the test did not isolate those controls. Non-provider patterns and validity checks were disabled and were not tested.
+
 ## Limits of the Guarantee
 
-- This is merge-time enforcement. Unprotected branches and forks can already expose rejected content publicly.
+- Genomic-file hygiene is merge-time enforcement. Unprotected branches and forks can already expose rejected data publicly.
 - The scanner does not classify arbitrary patient text, inspect archive contents, or download LFS payloads. Renaming data to evade a check is prohibited.
-- The file checker is not a credential scanner. Secret scanning and push-protection acceptance belong to task 1.2 and remain unverified.
+- The file checker is not a credential scanner. GitHub push protection covers supported recognizable patterns, not every password or sensitive value; provider formats can change and explicit bypass flows exist. The no-bypass test does not prove bypass is impossible.
 - Merge queues are not supported by the current workflow because it does not handle `merge_group` events.
 - Code-repository branch protection is not a content gate on this wiki. Keep wiki editing restricted to trusted contributors and apply the same no-data/no-secrets rules.
 
@@ -55,3 +64,5 @@ Test PRs #3-#9 are unmerged and their closure submissions were still pending at 
 - [Default-branch ruleset](https://github.com/samueltauil/genomics-variant-analytics/rules/22782462)
 - [GitHub guidance on pull_request_target](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull_request_target)
 - [GitHub protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+- [Supported secret patterns](https://docs.github.com/en/code-security/secret-scanning/introduction/supported-secret-scanning-patterns)
+- [Command-line push protection](https://docs.github.com/en/code-security/secret-scanning/working-with-secret-scanning-and-push-protection/working-with-push-protection-from-the-command-line)
