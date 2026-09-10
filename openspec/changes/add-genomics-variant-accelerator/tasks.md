@@ -1,5 +1,7 @@
 ## 1. Repository guardrails and foundation
 
+Implementation note (2026-09-10): task 1.1 is in progress. The Git-object data-hygiene scanner, synthetic repository tests, trusted-policy status workflow, and administrator acceptance procedure are implemented locally. All 12 tests pass, both workflows pass actionlint 1.7.12, and strict OpenSpec validation passes. GitHub reports `main` as unprotected. Live workflow installation, required-check configuration, merge refusal, and direct-push refusal remain unverified, so the task stays unchecked. See [CONTRIBUTING.md](../../../CONTRIBUTING.md#administrator-setup-and-acceptance).
+
 - [ ] 1.1 Create the public repository, protect the default branch to require a pull request, and add the data-hygiene status check as required, and verify a pull request containing a `.vcf`, `.bam`, `.cram`, or `.fastq` file or an oversized file cannot be merged, and a direct push to the default branch is refused
 - [ ] 1.2 Enable secret scanning with push protection, and verify a commit carrying a recognized credential pattern is blocked at push time
 - [ ] 1.3 Provision the SSD provisioned-v2 classic file share for the SMB landing zone with SMB Multichannel enabled, and verify a 100 GiB sequential write sustains the provisioned throughput and the share reports the expected IOPS ceiling

@@ -1,0 +1,57 @@
+name: Data hygiene
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-git-objects:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      statuses: write
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      GH_REPO: ${{ github.repository }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Mark the pull request head pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh api --method POST "repos/$GH_REPO/statuses/$PR_HEAD_SHA"
+          -f state=pending -f context=data-hygiene
+          -f description='Inspecting Git objects with the trusted policy'
+          -f target_url="$RUN_URL" --silent
+
+      - name: Check out trusted policy only
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch pull request objects without checking them out
+        run: git fetch --no-tags origin "$PR_BASE_SHA" "$PR_HEAD_SHA"
+
+      - name: Inspect pull request tree and introduced history
+        run: >-
+          python3 -I scripts/check_data_hygiene.py
+          --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA"
+          --max-bytes 1048576
+
+      - name: Publish the result on the pull request head
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_STATE: ${{ job.status == 'success' && 'success' || 'failure' }}
+        run: >-
+          gh api --method POST "repos/$GH_REPO/statuses/$PR_HEAD_SHA"
+          -f state="$CHECK_STATE" -f context=data-hygiene
+          -f description='Git object inspection completed; see workflow logs'
+          -f target_url="$RUN_URL" --silent

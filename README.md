@@ -2,8 +2,8 @@
 
 **Sequencer → governed variant store on Azure.** Keep the laboratory's SMB write path untouched while moving storage, compute, governance, and analytics into Azure, ending in a Delta-based variant store that is queryable and traceable to its source files.
 
-> **Status: specification. Nothing here is deployable yet.**
-> This repository currently contains specs, design decisions, and a task breakdown. No infrastructure, pipeline, or notebook code exists. See [Coverage](#coverage) for what that means in a customer conversation.
+> **Status: implementation started. Nothing here is deployable yet.**
+> The repository data-hygiene checker and its tests are implemented, with GitHub workflows ready for installation. Live branch protection is not yet verified. No infrastructure, pipeline, or notebook code exists. See [Coverage](#coverage) for what that means in a customer conversation.
 
 ## What this is, and what it is not
 
@@ -70,7 +70,7 @@ Ten capability specs live in [openspec/](openspec/). Each is a behavior contract
 
 ## Coverage
 
-Nothing is built yet, so every capability is currently **specified only**.
+The engineering-workflow capability is **partially demonstrated** locally: its data-hygiene checker runs against synthetic test repositories. GitHub enforcement remains unverified. All other capabilities remain **specified only** in the demo environment.
 
 | State | Meaning for a customer conversation |
 |---|---|
@@ -100,7 +100,7 @@ Until then: Azure Managed Lustre and provisioned-v2 SSD file shares are the two 
 
 Demo data is **synthetic or openly licensed**. Variant content comes from Illumina Platinum Genomes via Azure Open Datasets; subject, sample, and cohort identifiers are generated. No real patient-identifiable data is used, and none should be added.
 
-The repository itself never holds genomic data. A required status check fails any pull request introducing `.vcf`, `.bam`, `.cram`, `.fastq`, or oversized files.
+The repository itself must never hold genomic data. The data-hygiene workflow rejects genomic file extensions and Git blobs over 1 MiB. Server-side enforcement requires the [administrator setup and acceptance checks](CONTRIBUTING.md#administrator-setup-and-acceptance); those live settings are not yet verified.
 
 ## Reuse
 
