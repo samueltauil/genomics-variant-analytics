@@ -51,7 +51,7 @@ Reference manifests and pipeline versions supply the additional context needed t
 
 ## Local Metadata Implementation
 
-Tasks 6.1 and 6.3 now have a persistent SQLite model with 13 passing synthetic tests. Entities carry an immutable, globally unique identifier and kind; identifiers match `SYN-[A-Z0-9][A-Z0-9_-]*`. Links preserve this chain:
+Tasks 6.1 through 6.4 now have a persistent SQLite model with 21 passing synthetic tests. Entities carry an immutable, globally unique identifier and kind; identifiers match `SYN-[A-Z0-9][A-Z0-9_-]*`. Links preserve this chain:
 
 ```text
 subject -> sample -> sequencing_run -> fastq -> bam/cram -> vcf/gvcf -> variant
@@ -65,7 +65,11 @@ This is artifact ancestry, not sample-genotype assignment: a multiplexed run or 
 
 The API requires a trusted absolute local database path, separate from scanner inventory. It rejects network/redirect paths using the shared local-path guard and rejects foreign database schemas. It accepts no clinical attributes, but returns subject linkage: **do not expose it to analysts or treat it as access-controlled**. Identifier syntax is not PHI detection, and direct database access can bypass application rules. Protect files and reports with local filesystem controls.
 
-Task 6.2's file URI, producing workflow run and integrity fields, task 6.4's archive behavior, task 6.5's clinical/research grants, audit and Delta/Purview integration remain pending. Trace responses declare `mode: local-only` and `azure_readiness: not-evaluated`. Published development sources are the [metadata API](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/scripts/metadata_store.py), [synthetic tests](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/tests/test_metadata_store.py) and [usage guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/metadata-store.md). Publication is not evidence of cloud readiness or governed access.
+New file artifacts require `storage_uri`, `analysis_stage`, `producing_run` and `integrity_result`, with an optional SHA-256. Sequencing producers are registered from their lineage entities; processing producers use `add_pipeline_run` with workflow identity and version. `get_artifact` returns those details and the archive flag. URIs and integrity assertions are recorded, not resolved or verified; no pipeline execution is implied by registering a producer.
+
+`archive_artifact` marks metadata idempotently without deleting files or links. Variants still resolve to the same source entry with `archived: true`; both trace directions expose this flag in schema version 2. Version-1 databases migrate without invented file details; `backfill_file_metadata` supplies missing details once before file retrieval or archival.
+
+Task 6.5's clinical/research grants, audit and Delta/Purview integration remain pending. Trace responses declare `mode: local-only` and `azure_readiness: not-evaluated`. Development sources are the [metadata API](https://github.com/samueltauil/genomics-variant-analytics/blob/security/secret-push-protection/scripts/metadata_store.py), [synthetic tests](https://github.com/samueltauil/genomics-variant-analytics/blob/security/secret-push-protection/tests/test_metadata_store.py) and [usage guide](https://github.com/samueltauil/genomics-variant-analytics/blob/security/secret-push-protection/docs/metadata-store.md). Publication is not evidence of cloud readiness or governed access.
 
 ## Versioning and Retention
 

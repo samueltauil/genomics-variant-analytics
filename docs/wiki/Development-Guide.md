@@ -20,7 +20,7 @@ Fetch the current target branch before the comparison and substitute it for `ori
 | `1` | A policy violation was found |
 | `2` | Inspection could not complete; do not treat this as a pass |
 
-The original published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The committed development implementation passes **76 local tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness, 12 submission and 13 metadata tests (82.339 seconds on Windows in the publication check). Strict OpenSpec validation and introduced-history data hygiene also pass. Consult PR #12 for the current hosted CI result. Fixtures must never contain biological data, real identifiers, or credentials.
+The current development implementation passes **84 local tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness, 12 submission and 21 metadata tests (72.423 seconds on Windows). The updated metadata usage example and strict OpenSpec validation also pass. Consult PR #12 for hosted CI, which is separate from local verification. Fixtures must never contain biological data, real identifiers, or credentials.
 
 ## Local-Only Implementation
 
@@ -58,13 +58,13 @@ The new `scripts/validate_submission.py` CLI accepts three trusted local JSON pa
 
 The Python `submit_run` API validates before calling an injected allocator. Twelve synthetic tests verify this ordering and rejection cases. Task 4.3 remains pending until the real workflow uses the gate with a trusted published inventory. Payload checksums, availability, scientific compatibility, attestation and cloud access are not established by placeholder test manifests. See the [reference-submission guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/reference-submission.md) for full schemas and examples.
 
-The local `scripts.metadata_store.MetadataStore` Python API implements tasks 6.1 and 6.3 with synthetic entity identifiers and typed parent links. It persists full-chain ancestry in SQLite, rejects missing parents without partial writes, and returns snapshot-consistent forward/backward traces. Thirteen tests cover these rules and shared ancestry, persistence and path guards:
+The local `scripts.metadata_store.MetadataStore` Python API implements tasks 6.1 through 6.4 with synthetic entity identifiers, typed parent links, required file details and metadata-only archival. It persists full-chain ancestry, rejects invalid writes atomically, and returns snapshot-consistent traces. Twenty-one tests cover these rules, producer references, legacy backfill, archival, persistence and path guards:
 
 ```powershell
 python -m unittest discover -s tests -p test_metadata_store.py -v
 ```
 
-Use a trusted absolute local database path, separate from the landing inventory, and close the store through its context manager. This is not a CLI or an access-controlled service. File attributes (6.2), archive behavior (6.4), access grants (6.5) and real pipeline integration remain pending. The [metadata-store guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/metadata-store.md) contains the API example; the [metadata model page](Data-Model-and-Provenance#local-metadata-implementation) records the contract and limits.
+Use a trusted absolute local database path, separate from the landing inventory, and close the store through its context manager. New artifacts require `file_metadata`; register processing producers with `add_pipeline_run`, retrieve details with `get_artifact`, and mark archival with `archive_artifact`. Version-1 stores upgrade without invented metadata and require explicit `backfill_file_metadata` for legacy files. This is not a CLI or an access-controlled service. Access grants (6.5), actual storage lifecycle and real pipeline integration remain pending. The [metadata model page](Data-Model-and-Provenance#local-metadata-implementation) links the current API and usage guide.
 
 Azure login, subscription discovery, provisioning, uploads, benchmarks and teardown remain paused. No local test establishes cloud readiness or authorizes any of those actions. No resources were created by these local changes; existing subscription charges are unknown. Proceeding to billable deployment requires a numeric spending limit plus a dated, region-specific estimate from approved sizing and a separately authorized deployment.
 
@@ -84,7 +84,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Consult those PRs for current review state. Tasks 2.1 and 2.2 have 21 local synthetic tests covering discovery, metadata, persistence, slow writes and marker/stability behavior; tasks 6.1 and 6.3 have 13 synthetic lineage/integrity tests. The local record is **6/89 completed**, with 83 pending; default-branch checkboxes remain stale. Cloud deployment and SMB acceptance are not implied by local completion.
+Do not archive the entire change because individual tasks are complete. Tasks 2.1 and 2.2 have 21 local tests; tasks 6.1 through 6.4 have 21 metadata tests. The development record is **8/89 completed**, with 81 pending, including historical guardrail acceptance. Default-branch records remain stale until merge. The maintainer authorized zero required approvals on 2026-09-10; PRs and required checks remain in place, but the earlier independent-review/direct-push guarantee no longer applies. Cloud deployment and SMB acceptance are not implied by local completion.
 
 ## Practical Lessons
 

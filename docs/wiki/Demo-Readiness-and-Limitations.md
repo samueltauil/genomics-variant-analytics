@@ -7,20 +7,20 @@
 | Area | State |
 |---|---|
 | Data-hygiene checker and trusted workflow | Implemented and live-tested |
-| Branch checks, review, and rejection tests | Verified; acceptance documentation in PR #10 awaiting review |
+| Branch checks and PR rule | Retained; zero required approvals now authorized for solo development; historical direct-push rejection evidence no longer describes the current guarantee |
 | Secret push protection | Enabled; never-issued credential-pattern push rejected, evidence in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) awaiting review |
 | Candidate asset inventory and validator | Implemented locally; no templates or approved infrastructure plan |
 | Write smoke test | Local hash/cleanup verified; no SMB throughput or IOPS acceptance |
 | Scheduled landing inventory and completeness (2.1, 2.2) | 21 local tests pass; stability and optional fresh markers implemented; failure/retry pending |
 | Reference-submission gate (4.3 preparation) | 12 local tests pass; real workflow and published reference inventory integration pending |
-| Metadata lineage and referential integrity (6.1, 6.3) | 13 synthetic local tests pass; file attributes, archive behavior, access grants and pipeline integration pending |
+| Metadata lineage, file details, integrity and archival (6.1 through 6.4) | 21 synthetic local tests pass; access grants and actual pipeline/storage integration pending |
 | SMB service and staging | Specified only; no cloud deployment or connectivity acceptance |
 | Nextflow, Batch, and Slurm processing | Specified only |
 | Reference data and Delta store | Specified only |
 | Access tiers, catalog integration, and analytics | Specified only |
 | Preflight, reset, teardown, and cost measurements | Not implemented or measured |
 
-The published development task record is **6/89 completed** (1.1, 1.2, 2.1, 2.2, 6.1 and 6.3), and all **76 local tests pass**. The implementation and wiki sources are on their review branches, not `main`. See the [Development Guide](Development-Guide#local-only-implementation) for exact local scope.
+The development task record is **8/89 completed** (1.1, 1.2, 2.1, 2.2 and 6.1 through 6.4), including historical guardrail acceptance, and all **84 local tests pass**. The implementation and wiki sources are on development branches, not `main`. See the [Development Guide](Development-Guide#local-only-implementation) for exact local scope.
 
 Azure authentication, account discovery, provisioning, uploads, live benchmarks and teardown are paused. Task 1.3's 100 GiB SMB measurement and IOPS verification remain pending. Local validation neither completes cloud acceptance nor authorizes cloud access; IaC generation still requires a researched resource list and concrete-plan approval. No Azure resources were created by this implementation. Existing subscription charges are unknown; no numeric spending limit or priced resource sizing has been approved.
 

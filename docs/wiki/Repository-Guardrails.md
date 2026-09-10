@@ -8,7 +8,7 @@
 |---|---|
 | Required checks | `data-hygiene` and `hygiene-tests`, bound to GitHub Actions app ID `15368` |
 | Up-to-date requirement | Strict required-status policy |
-| Review | One independent approving review from a reviewer with write access; stale approvals dismissed |
+| Review | Zero required approvals, explicitly authorized by the maintainer on 2026-09-10 for solo development; PRs and required checks retained |
 | Administrators | Classic branch protection enforced |
 | Force pushes and deletion | Disabled for `main` |
 | Additional PR rule | Active default-branch ruleset `22782462`, resolved review threads required, no bypass actors |
@@ -38,7 +38,7 @@ See the [scanner](https://github.com/samueltauil/genomics-variant-analytics/blob
 
 The negative cases branched independently. No biological data or credentials were used, and no forbidden fixture was merged. Rule suite `4021920031` recorded the passing-head administrator push with status checks passing and the approval requirement failing. Rule suite `4021835591` recorded a fresh-commit direct-push refusal. Workflow run links are preserved in the acceptance record in PR #10; logs remain subject to GitHub retention.
 
-During the initial zero-approval configuration, GitHub accepted the empty commit from the already-open, green [PR #2](https://github.com/samueltauil/genomics-variant-analytics/pull/2) as a fast-forward merge. Independent approval was then required and the probe repeated successfully. This does not establish that GitHub forbids every fast-forward push satisfying an approved PR's requirements.
+During the initial zero-approval configuration, GitHub accepted the empty commit from the already-open, green [PR #2](https://github.com/samueltauil/genomics-variant-analytics/pull/2) as a fast-forward merge. Independent approval was then required and the probe repeated successfully. The maintainer subsequently authorized returning both review counts to zero to unblock solo implementation. Strict checks, the PR rule, administrator enforcement, resolved threads, no bypass actors and force-push/deletion restrictions were verified unchanged. The green-PR fast-forward gap therefore applies again; earlier rejection probes are historical evidence, not a current guarantee.
 
 Test PRs #3-#9 are unmerged and their closure submissions were still pending at the last verification. They are intentional probes, not proposed product changes; do not approve or merge them.
 
