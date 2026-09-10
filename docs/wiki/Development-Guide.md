@@ -1,10 +1,10 @@
 # Development Guide
 
-The current executable surface is repository data hygiene. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
+The default-branch baseline includes repository data hygiene. Local infrastructure validation, write-test tooling, landing completeness, reference-submission and metadata-model changes are committed and pushed through [4900f26](https://github.com/samueltauil/genomics-variant-analytics/tree/4900f26), under [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12), as of 2026-09-10. They are not merged into `main`. There is no application server, infrastructure deployment command, or end-to-end demo command yet.
 
 ## Local Checks
 
-Use Git and Python 3.10 or newer. The scanner and tests use the standard library; no Python packages are required. From the repository root:
+Use Git and Python 3.10 or newer; the expanded local suite also requires PowerShell 7.2+ (`pwsh`). The scanners and tests use the standard library; no Python packages are required. From the repository root:
 
 ```sh
 python -m unittest discover -s tests -p 'test_*.py' -v
@@ -20,7 +20,53 @@ Fetch the current target branch before the comparison and substitute it for `ori
 | `1` | A policy violation was found |
 | `2` | Inspection could not complete; do not treat this as a pass |
 
-The documented baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. Fixtures must never contain biological data, real identifiers, or credentials.
+The original published baseline is 12 passing synthetic Git-repository tests and actionlint 1.7.12 validation of both workflows. The committed development implementation passes **76 local tests**: 12 hygiene, 18 infrastructure/write, 21 landing-inventory/completeness, 12 submission and 13 metadata tests (82.339 seconds on Windows in the publication check). Strict OpenSpec validation and introduced-history data hygiene also pass. Consult PR #12 for the current hosted CI result. Fixtures must never contain biological data, real identifiers, or credentials.
+
+## Local-Only Implementation
+
+The following commands require the published `security/secret-push-protection` development branch or commit `4900f26`; they are not yet available from a fresh checkout of `main`. Implementation publication does not authorize Azure operations. Local Azurite configuration, databases and storage directories are ignored; existing runtime files are not deleted.
+
+```powershell
+./scripts/Invoke-Infrastructure.ps1 -Action Validate | ConvertTo-Json -Depth 4
+./scripts/Test-LandingWrite.ps1 -Directory ([IO.Path]::GetTempPath()) -ByteCount 1048593
+python -m unittest discover -s tests -p 'test_landing_scan.py' -v
+```
+
+The infrastructure validator checks schema, task references and dependency order for 12 candidate work packages. Only `Validate` is supported; it reports `TemplatesBuilt: false`, `AzureReadiness: not-evaluated` and `DeploymentSupported: false`. This is not an approved resource plan or a Bicep compilation. Resource-list and concrete-plan approval remain required before IaC generation.
+
+The write harness accepts 1 byte to 1 GiB (default 16 MiB), writes a unique scratch file, flushes, verifies SHA-256 and removes the scratch file on normal close. It rejects network paths and redirected ancestors. Timing is a local smoke measurement affected by caching and repeated-buffer behavior, not the task 1.3 100 GiB SMB benchmark or evidence of a provisioned IOPS ceiling.
+
+The task 2.1 scanner polls an existing trusted local directory, reads file metadata without opening payloads, and persists results in SQLite outside the landing root. For an existing synthetic run directory:
+
+```powershell
+python scripts/scan_landing.py --root "$env:TEMP\synthetic-landing" --inventory "$env:TEMP\landing-inventory.sqlite3" --polls 3 --interval-seconds 60
+```
+
+The first poll runs immediately, subsequent polls start after a post-scan delay, and each emits one JSON line. No background service is installed. A failed scan stops with a nonzero status and preserves the previous committed snapshot. Use one process per inventory and protect both stdout and the database as potentially sensitive metadata.
+
+The default path convention is `SYN-RUN-001/Data/Intensities/BaseCalls/SYN-SAMPLE-001_S1_L001_R1_001.fastq.gz`. A full-path regex supplied through `--path-pattern` can extract named `run_id` and `sample_id` groups for other instrument layouts without renaming files. Unmatched names remain visible with null IDs and `metadata_error: unrecognized-path`.
+
+Arrival means first observation in UTC, not exact transfer start; it survives growth and restarts. Missing files retain history with `present: false`. A recognized file becomes `complete` after two consecutive successful polls with identical size/mtime, or when an explicitly configured fresh vendor marker is observed. Later changes revoke completeness. Unknown IDs, missing files and marker files themselves are not complete payloads. Reports use schema version 2 and `completeness_evaluated: true`.
+
+Optionally supply `--completion-marker '{run_id}/RTAComplete.txt'` with a new inventory database. Templates accept `{run_id}`, `{sample_id}` and `{path}`; the marker must stay within the root and be at least as new as the payload. This is an opt-in example, not an assumed instrument convention. The root, parsing pattern and marker policy are bound to the database. Existing task 2.1 databases upgrade in place with markers disabled.
+
+Stability is not proof of success: a writer can pause or leave a truncated file. Task 2.3 requires trusted expected sizes/checksums or vendor failure signals and a timeout; that contract is unresolved. Failure/retry handling and staging remain pending. Do not treat this inventory as permission to stage data.
+
+Both landing tools reject UNC/device paths and symlink/reparse redirects; on Windows they require fixed local drives. These guards are not a sandbox against path races or every POSIX mount mechanism. Use synthetic data and trusted directories. Keep generated inventories outside Git; `.sqlite3` files and their sidecars are ignored. Detailed current usage is in the development working tree's `infra/README.md` and `docs/landing-inventory.md`.
+
+The new `scripts/validate_submission.py` CLI accepts three trusted local JSON paths through `--request`, `--compatibility` and `--inventory`. It requires an exact workflow version, one explicit genome version and the complete compatible annotation set. Missing or incompatible versions fail without a default build. URI/checksum metadata and canonical-JSON manifest digests are pinned in its output; URIs are not resolved or downloaded. It always reports `compute_allocated: false` and `azure_readiness: not-evaluated`.
+
+The Python `submit_run` API validates before calling an injected allocator. Twelve synthetic tests verify this ordering and rejection cases. Task 4.3 remains pending until the real workflow uses the gate with a trusted published inventory. Payload checksums, availability, scientific compatibility, attestation and cloud access are not established by placeholder test manifests. See the [reference-submission guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/reference-submission.md) for full schemas and examples.
+
+The local `scripts.metadata_store.MetadataStore` Python API implements tasks 6.1 and 6.3 with synthetic entity identifiers and typed parent links. It persists full-chain ancestry in SQLite, rejects missing parents without partial writes, and returns snapshot-consistent forward/backward traces. Thirteen tests cover these rules and shared ancestry, persistence and path guards:
+
+```powershell
+python -m unittest discover -s tests -p test_metadata_store.py -v
+```
+
+Use a trusted absolute local database path, separate from the landing inventory, and close the store through its context manager. This is not a CLI or an access-controlled service. File attributes (6.2), archive behavior (6.4), access grants (6.5) and real pipeline integration remain pending. The [metadata-store guide](https://github.com/samueltauil/genomics-variant-analytics/blob/4900f26/docs/metadata-store.md) contains the API example; the [metadata model page](Data-Model-and-Provenance#local-metadata-implementation) records the contract and limits.
+
+Azure login, subscription discovery, provisioning, uploads, benchmarks and teardown remain paused. No local test establishes cloud readiness or authorizes any of those actions. No resources were created by these local changes; existing subscription charges are unknown. Proceeding to billable deployment requires a numeric spending limit plus a dated, region-specific estimate from approved sizing and a separately authorized deployment.
 
 ## OpenSpec Workflow
 
@@ -38,7 +84,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Both are pending review as of 2026-09-10. Two of 89 tasks are verified; all other tasks remain unverified. Default-branch task checkboxes remain stale until the evidence merges.
+Do not archive the entire change because individual tasks are complete. Task 1.1's live acceptance record is in [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10); task 1.2's secret-protection record is in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). Consult those PRs for current review state. Tasks 2.1 and 2.2 have 21 local synthetic tests covering discovery, metadata, persistence, slow writes and marker/stability behavior; tasks 6.1 and 6.3 have 13 synthetic lineage/integrity tests. The local record is **6/89 completed**, with 83 pending; default-branch checkboxes remain stale. Cloud deployment and SMB acceptance are not implied by local completion.
 
 ## Practical Lessons
 
@@ -46,10 +92,12 @@ Do not archive the entire change because individual tasks are complete. Task 1.1
 - Stemless filenames such as `.vcf` need explicit coverage; Python path suffix parsing alone does not identify them reliably.
 - For generated Git-tree tests on Windows, write byte-exact stdin with explicit line endings. PowerShell text pipelines can append a carriage return to a filename passed to `git mktree`.
 - Test an administrator push of a passing but unapproved PR head. A zero-approval policy allowed a green, already-open PR to fast-forward during initial acceptance.
+- A Python SQLite connection context manager handles transactions but does not close the connection. Close it explicitly, including in tests, to release Windows file locks before temporary-directory cleanup.
+- Set `NO_COLOR=1` and `TERM=dumb` for captured PowerShell test output when asserting formatted field values.
 
 ## Maintaining the Wiki
 
-The Markdown sources are under `docs/wiki` in the code repository. `Home.md` is the landing page; `_Sidebar.md` supplies navigation. Links without file extensions name wiki pages. Keep the sources reviewable through code-repository PRs; the wiki's Git history is separate and its direct edits do not pass through this repository's required checks.
+The Markdown sources are under `docs/wiki` on the existing `docs/project-wiki` branch, reviewed through [PR #11](https://github.com/samueltauil/genomics-variant-analytics/pull/11); they are not yet on `main`. The live wiki is already populated. `Home.md` is the landing page; `_Sidebar.md` supplies navigation. Links without file extensions name wiki pages. Keep the sources reviewable through code-repository PRs; the wiki's Git history is separate and its direct edits do not pass through this repository's required checks.
 
 GitHub must have an initial wiki page before its separate Git remote is available. Once `Home` has been created in the signed-in web UI:
 

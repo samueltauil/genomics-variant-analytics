@@ -2,7 +2,7 @@
 
 A project knowledge base for the proposed path from an unchanged laboratory SMB workflow to a governed, queryable Delta variant store on Azure.
 
-**Status as of 2026-09-10:** repository guardrails are implemented and live-tested. The storage, processing, governance, and analytics platform is specified, not deployed. There is no runnable end-to-end demo yet.
+**Status as of 2026-09-10:** repository guardrails are implemented and live-tested. The local infrastructure validator, write smoke test, scheduled inventory, completeness checks, reference-submission gate and metadata lineage model are committed and pushed through [development commit 4900f26](https://github.com/samueltauil/genomics-variant-analytics/tree/4900f26), under [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12). They pass synthetic tests but are not merged into `main`. The Azure platform is not deployed and there is no runnable end-to-end demo.
 
 This is a reference architecture and demo accelerator, not a released Microsoft blueprint, a supported product, or a clinical decision system. No compliance certification or confirmed customer deployment is claimed.
 
@@ -22,8 +22,15 @@ This is a reference architecture and demo accelerator, not a released Microsoft 
 - A trusted GitHub workflow inspects proposed Git objects without executing proposed code and posts the required `data-hygiene` status on the PR head.
 - Synthetic tests, required checks, independent review, and administrator rejection probes verify the repository guardrails.
 - Secret scanning and push protection are enabled; a never-issued credential-pattern push was rejected before advancing the remote branch.
+- Local-only preparation validates a 12-group candidate asset inventory; no IaC templates or deployment command exist.
+- A bounded local write harness verifies SHA-256 read-back and scratch cleanup, without claiming SMB performance or IOPS acceptance.
+- Tasks 2.1 and 2.2's scheduled local scanner persists run/sample identifiers, sizes, first-observed arrivals and states, with two-poll size/mtime stability or optional fresh vendor markers determining completeness. Changes revoke completeness; interrupted-transfer/retry logic is still pending.
+- A local reference-submission gate checks exact workflow/build/annotation versions and rejects incompatible pairings before an allocator callback. Actual Nextflow integration and published references remain pending under task 4.3.
+- A local SQLite metadata model traverses Subject/Sample/Run/artifact/variant relationships in both directions and rejects missing parents atomically (6.1, 6.3). Its 13 tests cover branching, persistence and concurrent snapshot reads. File attributes, archive behavior and access grants remain pending; see [Data Model and Provenance](Data-Model-and-Provenance#local-metadata-implementation).
 
-[PR #1](https://github.com/samueltauil/genomics-variant-analytics/pull/1) installed the implementation. [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10) records task 1.1's acceptance; [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) adds task 1.2's secret-protection evidence. Both await review as of the date above. Two of 89 tasks are verified, but the task checkboxes on `main` remain stale until these records merge. All cloud tasks remain unverified.
+[PR #1](https://github.com/samueltauil/genomics-variant-analytics/pull/1) installed the guardrails. [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10) records task 1.1's acceptance; [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) adds task 1.2's secret-protection evidence and local implementation. Consult the PRs for current review state. The published development task record has **6/89 completed tasks** (1.1, 1.2, 2.1, 2.2, 6.1 and 6.3), with **76 local tests passing**. Default-branch checkboxes remain stale until review and merge. All cloud acceptance remains unverified.
+
+Azure authentication, account discovery, provisioning, uploads and live benchmarks are paused. No Azure resources were created by this implementation; any existing subscription charges are unknown. A numeric spending limit and approved, sized plan are required before billable deployment. See the [Development Guide](Development-Guide#local-only-implementation) for commands and publication limits.
 
 ## Sources of Truth
 

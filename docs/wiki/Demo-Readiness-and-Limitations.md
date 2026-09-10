@@ -1,6 +1,6 @@
 # Demo Readiness and Limitations
 
-**There is no runnable end-to-end demo as of 2026-09-10.** The current demonstration surface is repository guardrails and their synthetic tests. Storage, pipelines, variant tables, notebooks, visualizations, and deployment automation remain specified only.
+**There is no runnable end-to-end demo as of 2026-09-10.** Repository guardrails have live acceptance evidence. Local tools, completeness checks, reference-submission and metadata-model changes pass synthetic tests and are published through [commit 4900f26](https://github.com/samueltauil/genomics-variant-analytics/tree/4900f26), pending review under PR #12. Storage services, processing pipelines, variant tables, notebooks, visualizations and deployment automation remain specified only.
 
 ## Readiness
 
@@ -9,11 +9,20 @@
 | Data-hygiene checker and trusted workflow | Implemented and live-tested |
 | Branch checks, review, and rejection tests | Verified; acceptance documentation in PR #10 awaiting review |
 | Secret push protection | Enabled; never-issued credential-pattern push rejected, evidence in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) awaiting review |
-| SMB landing zone and staging | Specified only |
+| Candidate asset inventory and validator | Implemented locally; no templates or approved infrastructure plan |
+| Write smoke test | Local hash/cleanup verified; no SMB throughput or IOPS acceptance |
+| Scheduled landing inventory and completeness (2.1, 2.2) | 21 local tests pass; stability and optional fresh markers implemented; failure/retry pending |
+| Reference-submission gate (4.3 preparation) | 12 local tests pass; real workflow and published reference inventory integration pending |
+| Metadata lineage and referential integrity (6.1, 6.3) | 13 synthetic local tests pass; file attributes, archive behavior, access grants and pipeline integration pending |
+| SMB service and staging | Specified only; no cloud deployment or connectivity acceptance |
 | Nextflow, Batch, and Slurm processing | Specified only |
-| Reference data, metadata, and Delta store | Specified only |
+| Reference data and Delta store | Specified only |
 | Access tiers, catalog integration, and analytics | Specified only |
 | Preflight, reset, teardown, and cost measurements | Not implemented or measured |
+
+The published development task record is **6/89 completed** (1.1, 1.2, 2.1, 2.2, 6.1 and 6.3), and all **76 local tests pass**. The implementation and wiki sources are on their review branches, not `main`. See the [Development Guide](Development-Guide#local-only-implementation) for exact local scope.
+
+Azure authentication, account discovery, provisioning, uploads, live benchmarks and teardown are paused. Task 1.3's 100 GiB SMB measurement and IOPS verification remain pending. Local validation neither completes cloud acceptance nor authorizes cloud access; IaC generation still requires a researched resource list and concrete-plan approval. No Azure resources were created by this implementation. Existing subscription charges are unknown; no numeric spending limit or priced resource sizing has been approved.
 
 The [demo runbook](https://github.com/samueltauil/genomics-variant-analytics/blob/main/docs/demo-runbook.md) is a draft outline, not executable delivery instructions. Its planned phases are bring-up, seeding, presentation, rehearsed failures, reset, and teardown. Do not attempt a customer delivery from it.
 
@@ -37,6 +46,10 @@ Exact service limits, regional availability, billing, and lifecycle dates must b
 ## Open Decisions
 
 The reference deployment still needs an engine choice between Fabric and Databricks, an annotation strategy, measured sizing and cost, and validated physical table optimizations. These are implementation decisions to resolve through the specs, not choices this wiki silently makes.
+
+Task 2.3 is blocked on transfer-failure evidence: two unchanged polls cannot distinguish a completed file from a paused or truncated write. A trusted expected-size/checksum manifest or vendor status/timeout contract is needed before failure and retry behavior can be completed. The new task 4.3 gate also needs reviewed compatibility declarations, a published reference inventory and a real pipeline integration. Synthetic hashes are not reference publication evidence.
+
+Before billable deployment, supply a currency and numeric per-delivery/idle spending limit, approve region and sizing, and review a dated estimate. Both Batch and HPC remain alternative planned paths, not services enabled together by default. No subscription spending cap or deployed budget control is claimed.
 
 ## Claims to Avoid
 
