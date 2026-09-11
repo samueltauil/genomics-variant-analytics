@@ -1,6 +1,6 @@
 # Demo Readiness and Limitations
 
-**There is no runnable end-to-end demo as of 2026-09-10.** Repository guardrails have live acceptance evidence. Local tools, completeness checks, reference-submission and metadata-model changes pass synthetic tests and are published through [commit 4900f26](https://github.com/samueltauil/genomics-variant-analytics/tree/4900f26), pending review under PR #12. Storage services, processing pipelines, variant tables, notebooks, visualizations and deployment automation remain specified only.
+**There is still no runnable end-to-end demo as of 2026-09-11.** Repository guardrails have live acceptance evidence, and ingestion, object-storage layout and the first staging hop are now deployed and measured in a disposable sandbox environment. Processing pipelines, variant tables, notebooks, visualizations, governance tiers and delivery automation remain specified only.
 
 ## Readiness
 
@@ -9,20 +9,21 @@
 | Data-hygiene checker and trusted workflow | Implemented and live-tested |
 | Branch checks and PR rule | Retained; zero required approvals now authorized for solo development; historical direct-push rejection evidence no longer describes the current guarantee |
 | Secret push protection | Enabled; never-issued credential-pattern push rejected, evidence in [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) awaiting review |
-| Candidate asset inventory and validator | Implemented locally; no templates or approved infrastructure plan |
-| Write smoke test | Local hash/cleanup verified; no SMB throughput or IOPS acceptance |
-| Scheduled landing inventory and completeness (2.1, 2.2) | 21 local tests pass; stability and optional fresh markers implemented; failure/retry pending |
+| Candidate asset inventory and validator | Implemented locally; parameterized Bicep now deploys the storage, identity and network foundation |
+| SMB landing zone (1.3) | Deployed SSD provisioned v2 with Multichannel; 100 GiB write sustained 240 MiB/s against a 200 MiB/s provisioned ceiling, mounted by managed identity with no account key |
+| Object-storage taxonomy and least privilege (1.4, 2.4) | Twelve directories exist; staging identity writes, processing identity refused write and refused a landing-share listing |
+| Scheduled landing inventory and completeness (2.1, 2.2) | 21 local tests pass; the same rule runs over a local directory and the Azure Files share; failure/retry pending |
+| Staging to object storage (3.1) | Data Factory Copy over private endpoints stages only complete files; a growing file was skipped. Checksum comparison, staging log, lineage and lifecycle pending |
 | Reference-submission gate (4.3 preparation) | 12 local tests pass; real workflow and published reference inventory integration pending |
 | Metadata lineage, file details, integrity and archival (6.1 through 6.4) | 21 synthetic local tests pass; access grants and actual pipeline/storage integration pending |
-| SMB service and staging | Specified only; no cloud deployment or connectivity acceptance |
 | Nextflow, Batch, and Slurm processing | Specified only |
 | Reference data and Delta store | Specified only |
 | Access tiers, catalog integration, and analytics | Specified only |
-| Preflight, reset, teardown, and cost measurements | Not implemented or measured |
+| Preflight, reset, teardown, and cost measurements | Teardown script exists and is tag-guarded; preflight, reset and cost measurement not implemented |
 
-The development task record is **8/89 completed** (1.1, 1.2, 2.1, 2.2 and 6.1 through 6.4), including historical guardrail acceptance, and all **84 local tests pass**. The implementation and wiki sources are on development branches, not `main`. See the [Development Guide](Development-Guide#local-only-implementation) for exact local scope.
+The development task record is **12/89 completed**, including historical guardrail acceptance, and all **84 local tests pass**.
 
-Azure authentication, account discovery, provisioning, uploads, live benchmarks and teardown are paused. Task 1.3's 100 GiB SMB measurement and IOPS verification remain pending. Local validation neither completes cloud acceptance nor authorizes cloud access; IaC generation still requires a researched resource list and concrete-plan approval. No Azure resources were created by this implementation. Existing subscription charges are unknown; no numeric spending limit or priced resource sizing has been approved.
+The deployed environment is disposable and billable. The provisioned share charges on capacity, IOPS and throughput whether or not it is used; the verification client and Data Factory integration runtime charge while running. Deployment has been exercised in exactly one sandbox subscription, so regional availability, quota and policy differences should be expected elsewhere. No cost per delivery or per sample has been measured.
 
 The [demo runbook](https://github.com/samueltauil/genomics-variant-analytics/blob/main/docs/demo-runbook.md) is a draft outline, not executable delivery instructions. Its planned phases are bring-up, seeding, presentation, rehearsed failures, reset, and teardown. Do not attempt a customer delivery from it.
 
@@ -35,6 +36,8 @@ The hereditary-cancer scenario and query set are proposed demo choices. They are
 ## Constraints That Shape the Design
 
 - Arrival discovery on the SMB share is planned as scheduled scanning, with stability checks or completion markers. Do not present it as native Azure Files file-created Event Grid delivery.
+- Identity-based SMB is the landing-zone contract, not a convenience. A governed subscription is likely to disable shared-key access, which removes NTLMv2 mounting entirely; plan for managed identity or a domain-joined client rather than a share key.
+- Private endpoints should be assumed, not added later. Policy disabled public network access on both storage accounts, so every client and service had to sit inside the network from the first deployment.
 - Data Factory Copy is the planned file-share staging mechanism. Do not show Storage Actions as a cross-service file-share mover.
 - Purview is a coarse-grained catalog and lineage surface in this design. Variant-level traceability comes from record fields and the metadata model.
 - Batch/HPC equivalence is to be validated using variant concordance, not byte equality. The draft runbook's "identical outputs" shorthand must not be repeated as a guarantee.
