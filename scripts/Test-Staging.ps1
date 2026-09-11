@@ -58,7 +58,7 @@ function Invoke-Client {
 $seeder = @'
 import sys, urllib.error, urllib.request
 sys.path.insert(0, "/opt/genomics")
-from stage_landing import API_VERSION, managed_identity_token
+from scripts.stage_landing import API_VERSION, managed_identity_token
 
 token = managed_identity_token("__CLIENT_ID__")
 base = "https://__ACCOUNT__.file.core.windows.net/__SHARE__"
@@ -110,25 +110,25 @@ $seeder = $seeder.
     Replace('__ACCOUNT__', $environment.landingAccount).
     Replace('__SHARE__', $environment.landingShare)
 
-$scanCommand = "python3 stage_landing.py --account $($environment.landingAccount) --share $($environment.landingShare) --inventory /tmp/inventory.sqlite3 --client-id $($environment.identities.ingestion)"
+$scanCommand = "python3 -m scripts.stage_landing --account $($environment.landingAccount) --share $($environment.landingShare) --inventory /tmp/inventory.sqlite3 --client-id $($environment.identities.ingestion)"
 
 $setup = @"
 set -eu
-install -d /opt/genomics
+install -d /opt/genomics/scripts
 cd /opt/genomics
-cat >scan_landing.py <<'SCANEOF'
+cat >scripts/scan_landing.py <<'SCANEOF'
 $(Get-Content (Join-Path $repositoryRoot 'scripts/scan_landing.py') -Raw)
 SCANEOF
-cat >stage_landing.py <<'STAGEEOF'
+cat >scripts/stage_landing.py <<'STAGEEOF'
 $(Get-Content (Join-Path $repositoryRoot 'scripts/stage_landing.py') -Raw)
 STAGEEOF
-cat >seed.py <<'SEEDEOF'
+cat >scripts/seed.py <<'SEEDEOF'
 $seeder
 SEEDEOF
 rm -f /tmp/inventory.sqlite3
-python3 seed.py create
+python3 scripts/seed.py create
 $scanCommand > /tmp/scan1.json
-python3 seed.py grow
+python3 scripts/seed.py grow
 $scanCommand > /tmp/scan2.json
 echo '---INVENTORY---'
 cat /tmp/scan2.json
@@ -199,7 +199,7 @@ cd /opt/genomics
 python3 - <<'PYEOF'
 import sys, urllib.request
 sys.path.insert(0, "/opt/genomics")
-from stage_landing import managed_identity_token
+from scripts.stage_landing import managed_identity_token
 token = managed_identity_token("$($environment.identities.staging)")
 url = "https://$($environment.lakeAccount).dfs.core.windows.net/$($environment.lakeFilesystem)?resource=filesystem&recursive=true&directory=$destinationFolder"
 request = urllib.request.Request(url)

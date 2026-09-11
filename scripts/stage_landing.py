@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ElementTree
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
-from scan_landing import DEFAULT_PATTERN, evaluate_inventory, local_path
+from scripts.scan_landing import DEFAULT_PATTERN, evaluate_inventory, local_path
 
 API_VERSION = "2022-11-02"
 IMDS = "http://169.254.169.254/metadata/identity/oauth2/token"

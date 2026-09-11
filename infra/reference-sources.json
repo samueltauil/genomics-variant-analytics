@@ -1,0 +1,61 @@
+{
+  "$comment": "Pinned reference sources. Versioned Ensembl paths are used deliberately so a published version is reproducible; 'current_*' aliases move and would break that.",
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "type": "genome",
+      "name": "GRCh38",
+      "version": "ensembl-116",
+      "artifacts": [
+        {
+          "filename": "Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz",
+          "source": "https://ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh38.dna.primary_assembly.fa.gz"
+        }
+      ]
+    },
+    {
+      "type": "genome",
+      "name": "GRCh37",
+      "version": "ensembl-116",
+      "artifacts": [
+        {
+          "filename": "Homo_sapiens.GRCh37.dna.primary_assembly.fa.gz",
+          "source": "https://ftp.ensembl.org/pub/grch37/release-116/fasta/homo_sapiens/dna/Homo_sapiens.GRCh37.dna.primary_assembly.fa.gz"
+        }
+      ]
+    },
+    {
+      "type": "gene-annotation",
+      "name": "GRCh38",
+      "version": "ensembl-116",
+      "artifacts": [
+        {
+          "filename": "Homo_sapiens.GRCh38.116.gtf.gz",
+          "source": "https://ftp.ensembl.org/pub/release-116/gtf/homo_sapiens/Homo_sapiens.GRCh38.116.gtf.gz"
+        }
+      ]
+    },
+    {
+      "type": "gene-annotation",
+      "name": "GRCh37",
+      "version": "ensembl-87",
+      "artifacts": [
+        {
+          "filename": "Homo_sapiens.GRCh37.87.gtf.gz",
+          "source": "https://ftp.ensembl.org/pub/grch37/release-116/gtf/homo_sapiens/Homo_sapiens.GRCh37.87.gtf.gz"
+        }
+      ]
+    },
+    {
+      "type": "transcript-annotation",
+      "name": "GRCh38",
+      "version": "ensembl-116",
+      "artifacts": [
+        {
+          "filename": "Homo_sapiens.GRCh38.cdna.all.fa.gz",
+          "source": "https://ftp.ensembl.org/pub/release-116/fasta/homo_sapiens/cdna/Homo_sapiens.GRCh38.cdna.all.fa.gz"
+        }
+      ]
+    }
+  ]
+}
