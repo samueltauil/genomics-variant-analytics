@@ -25,12 +25,12 @@ This is a reference architecture and demo accelerator, not a released Microsoft 
 - Local-only preparation validates a 12-group candidate asset inventory, and parameterized Bicep now deploys the storage, identity and network foundation from a single idempotent entry point.
 - The SMB landing share is SSD provisioned v2 with Multichannel enabled. A 100 GiB sequential write sustained **240 MiB/s** against a provisioned 200 MiB/s ceiling, mounted with a managed identity and no storage account key (task 1.3).
 - The object-storage taxonomy exists as twelve directories, writable by the staging identity and refused to the processing identity, which is also refused a landing-share listing (tasks 1.4, 2.4).
-- A Data Factory Copy pipeline stages only files the inventory reports complete; a file still growing between two observations was skipped (task 3.1).
+- A Data Factory Copy pipeline stages only files the inventory reports complete; a file still growing between two observations was skipped (task 3.1). Every staged artifact is then checksum-verified, and a deliberately corrupted destination is marked failed and withheld from downstream processing (tasks 3.2, 3.3).
 - Tasks 2.1 and 2.2's scheduled scanner persists run/sample identifiers, sizes, first-observed arrivals and states, with two-poll size/mtime stability or optional fresh vendor markers determining completeness. The same rule now runs over both a local directory and the Azure Files share. Interrupted-transfer/retry logic is still pending.
 - A local reference-submission gate checks exact workflow/build/annotation versions and rejects incompatible pairings before an allocator callback. Actual Nextflow integration and published references remain pending under task 4.3.
 - A local SQLite metadata model traverses the full lineage chain, rejects missing parents, requires file URI/stage/producer/integrity fields, and archives metadata without breaking variant references (6.1 through 6.4). Its 21 tests cover persistence, legacy backfill and concurrent snapshots. Access grants and actual pipeline/storage integration remain pending; see [Data Model and Provenance](Data-Model-and-Provenance#local-metadata-implementation).
 
-The development record has **12/89 completed tasks**, with **84 local tests passing**. Task 1.1's historical evidence predates the authorized solo-maintainer policy.
+The development record has **14/89 completed tasks**, with **92 local tests passing**. Task 1.1's historical evidence predates the authorized solo-maintainer policy.
 
 The deployed environment is disposable and billable: the provisioned share charges on capacity, IOPS and throughput whether or not it is used, and the verification client and Data Factory runtime charge while running. Tear it down when finished. Deployment is verified only in one sandbox subscription whose policies shaped the result; see [Architecture](Architecture#deployed-environment-and-platform-constraints).
 
