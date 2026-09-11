@@ -37,6 +37,10 @@ local.settings.json
 *.tfvars
 !example.tfvars
 
+# Deployed environment identifiers. Subscription and tenant ids never enter this repository.
+/.azure/*.env.json
+/.azure/*.local.*
+
 # Build and tooling
 node_modules/
 __pycache__/
