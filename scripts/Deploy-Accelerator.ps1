@@ -167,6 +167,26 @@ if ($created -ne $taxonomy.Count) {
 }
 Write-Host "Folder taxonomy created by the staging identity ($created directories)."
 
+# Data Factory raises its managed private endpoints as pending connections on each account.
+Write-Host 'Approving managed private endpoint connections.'
+foreach ($accountName in @($outputs.landingStorageAccount.value, $lakeAccount)) {
+    $accountId = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$accountName"
+    $connections = Invoke-Az @(
+        'network', 'private-endpoint-connection', 'list', '--id', $accountId, '-o', 'json'
+    ) 'Could not list private endpoint connections' | ConvertFrom-Json
+    foreach ($connection in $connections) {
+        if ($connection.properties.privateLinkServiceConnectionState.status -eq 'Pending') {
+            Invoke-Az @(
+                'network', 'private-endpoint-connection', 'approve'
+                '--id', $connection.id
+                '--description', 'Approved by Deploy-Accelerator'
+                '-o', 'none'
+            ) "Could not approve $($connection.name)"
+            Write-Host "  approved $($connection.name)"
+        }
+    }
+}
+
 $environment = [ordered]@{
     subscriptionId    = $SubscriptionId
     subscriptionName  = $account.name
@@ -181,6 +201,8 @@ $environment = [ordered]@{
     lakeAccount       = $lakeAccount
     lakeFilesystem    = $filesystem
     verificationVm    = $clientName
+    stagingFactory    = $outputs.stagingFactoryName.value
+    stagingPipeline   = $outputs.stagingPipelineName.value
     taxonomy          = $taxonomy
     identities        = [ordered]@{
         ingestion = $outputs.ingestionIdentityClientId.value

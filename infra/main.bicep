@@ -159,9 +159,29 @@ module verificationClient 'modules/test-client.bicep' = if (deployVerificationCl
   }
 }
 
+module staging 'modules/staging.bicep' = {
+  scope: environment
+  name: 'staging-pipeline'
+  params: {
+    location: location
+    tags: tags
+    name: 'adf-genomics-${environmentName}-${suffix}'
+    landingAccountId: landing.outputs.storageAccountId
+    landingAccountName: landing.outputs.storageAccountName
+    landingShareName: landing.outputs.shareName
+    lakeAccountId: lake.outputs.storageAccountId
+    lakeAccountName: lake.outputs.storageAccountName
+    lakeFilesystem: lake.outputs.filesystemName
+    ingestionIdentityId: identities.outputs.ingestionResourceId
+    stagingIdentityId: identities.outputs.stagingResourceId
+  }
+}
+
 output resourceGroupName string = environment.name
 output location string = location
 output verificationClientName string = deployVerificationClient ? verificationClient!.outputs.clientName : ''
+output stagingFactoryName string = staging.outputs.factoryName
+output stagingPipelineName string = staging.outputs.pipelineName
 output landingStorageAccount string = landing.outputs.storageAccountName
 output landingShareName string = landing.outputs.shareName
 output landingUncPath string = landing.outputs.uncPath

@@ -33,3 +33,5 @@ output resourceIds array = [
   staging.id
   pipeline.id
 ]
+output ingestionResourceId string = ingestion.id
+output stagingResourceId string = staging.id
