@@ -11,6 +11,9 @@ param adminPublicKey string
 param adminUsername string = 'genomicsops'
 param vmSize string = 'Standard_D4s_v7'
 
+@description('A governed subscription may force this value; a mismatch blocks redeployment because the type cannot be changed through the VM.')
+param osDiskType string = 'Standard_LRS'
+
 @description('Workload identities attached to the client so each grant can be exercised separately.')
 param userAssignedIdentityIds array
 
@@ -55,7 +58,7 @@ resource client 'Microsoft.Compute/virtualMachines@2024-11-01' = {
       osDisk: {
         createOption: 'FromImage'
         managedDisk: {
-          storageAccountType: 'Premium_LRS'
+          storageAccountType: osDiskType
         }
         deleteOption: 'Delete'
       }

@@ -10,6 +10,13 @@ param storageAccountName string
 @description('Container holding the healthcare data solutions folder taxonomy. Container names cannot preserve case, so the taxonomy lives in directories beneath it.')
 param filesystemName string = 'healthcare'
 
+@description('Separate zone for published reference versions, so write-once applies only to them.')
+param referenceContainerName string = 'reference'
+
+@minValue(1)
+@description('Immutability period for the reference zone. Short for disposable environments; a production deployment sets a longer period and locks it.')
+param referenceRetentionDays int = 1
+
 param stagingPrincipalId string
 param pipelinePrincipalId string
 param deployerPrincipalId string
@@ -70,6 +77,26 @@ resource filesystem 'Microsoft.Storage/storageAccounts/blobServices/containers@2
   }
 }
 
+resource referenceZone 'Microsoft.Storage/storageAccounts/blobServices/containers@2025-01-01' = {
+  parent: blobServices
+  name: referenceContainerName
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+// Container-level WORM gives published reference versions their write-once guarantee, because
+// hierarchical-namespace accounts cannot use version-level policies. Creating it through ARM leaves
+// it unlocked so a disposable environment stays deletable; a production deployment locks it.
+resource referenceImmutability 'Microsoft.Storage/storageAccounts/blobServices/containers/immutabilityPolicies@2025-01-01' = {
+  parent: referenceZone
+  name: 'default'
+  properties: {
+    immutabilityPeriodSinceCreationInDays: referenceRetentionDays
+    allowProtectedAppendWrites: false
+  }
+}
+
 resource stagingWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: account
   name: guid(account.id, stagingPrincipalId, blobDataContributorRoleId)
@@ -103,4 +130,5 @@ resource deployerVerify 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 output storageAccountName string = account.name
 output storageAccountId string = account.id
 output filesystemName string = filesystem.name
+output referenceContainerName string = referenceZone.name
 output dfsEndpoint string = account.properties.primaryEndpoints.dfs

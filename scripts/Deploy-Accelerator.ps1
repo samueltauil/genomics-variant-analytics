@@ -30,7 +30,11 @@ param(
     [int] $ShareBandwidthMibps = 200,
 
     [ValidateNotNullOrEmpty()]
-    [string] $SubscriptionId
+    [string] $SubscriptionId,
+
+    [Parameter(HelpMessage = 'Object id of the deploying principal. Supply this when Microsoft Graph is unavailable, as it often is for CI identities.')]
+    [ValidatePattern('^[0-9a-fA-F-]{36}$')]
+    [string] $DeployerObjectId
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,11 +72,20 @@ function Invoke-Az {
 }
 
 if (-not $SubscriptionId) {
-    $SubscriptionId = Invoke-Az @('account', 'show', '--query', 'id', '-o', 'tsv') 'No subscription selected. Run az login or pass -SubscriptionId.'
+    # The CLI default can change between runs, so a recorded environment wins over it.
+    if (Test-Path -LiteralPath $environmentFile) {
+        $SubscriptionId = (Get-Content -LiteralPath $environmentFile -Raw | ConvertFrom-Json).subscriptionId
+    }
+    else {
+        $SubscriptionId = Invoke-Az @('account', 'show', '--query', 'id', '-o', 'tsv') 'No subscription selected. Run az login or pass -SubscriptionId.'
+    }
 }
 
 $account = Invoke-Az @('account', 'show', '--subscription', $SubscriptionId, '-o', 'json') 'Could not read the requested subscription' | ConvertFrom-Json
-$deployerObjectId = Invoke-Az @('ad', 'signed-in-user', 'show', '--query', 'id', '-o', 'tsv') 'Could not resolve the signed-in principal'
+$deployerObjectId = $DeployerObjectId
+if (-not $deployerObjectId) {
+    $deployerObjectId = Invoke-Az @('ad', 'signed-in-user', 'show', '--query', 'id', '-o', 'tsv') 'Could not resolve the signed-in principal. Pass -DeployerObjectId when Microsoft Graph is unavailable.'
+}
 $expiresOn = (Get-Date).AddDays($ExpiresInDays).ToString('yyyy-MM-dd')
 $deploymentName = "genomics-$EnvironmentName-$(Get-Date -Format 'yyyyMMddHHmmss')"
 
@@ -122,6 +135,18 @@ $filesystem = $outputs.lakeFilesystem.value
 $clientName = $outputs.verificationClientName.value
 $stagingClientId = $outputs.stagingIdentityClientId.value
 $resourceGroupName = $outputs.resourceGroupName.value
+
+# The client is deallocated between runs to avoid idle compute charges.
+$power = Invoke-Az @(
+    'vm', 'get-instance-view', '-g', $resourceGroupName, '-n', $clientName,
+    '--subscription', $SubscriptionId, '--query',
+    'instanceView.statuses[?starts_with(code, ''PowerState'')].displayStatus', '-o', 'tsv'
+) 'Could not read the client power state'
+if ($power -notmatch 'running') {
+    Write-Host "  starting $clientName"
+    Invoke-Az @('vm', 'start', '-g', $resourceGroupName, '-n', $clientName,
+        '--subscription', $SubscriptionId, '-o', 'none') 'Could not start the client'
+}
 
 $directoryList = ($taxonomy | ForEach-Object { "'$_'" }) -join ' '
 $taxonomyTemplate = @'
@@ -200,6 +225,7 @@ $environment = [ordered]@{
     landingUncPath    = $outputs.landingUncPath.value
     lakeAccount       = $lakeAccount
     lakeFilesystem    = $filesystem
+    referenceContainer = $outputs.referenceContainer.value
     verificationVm    = $clientName
     stagingFactory    = $outputs.stagingFactoryName.value
     stagingPipeline   = $outputs.stagingPipelineName.value

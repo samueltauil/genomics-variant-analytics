@@ -30,7 +30,9 @@ This is a reference architecture and demo accelerator, not a released Microsoft 
 - A local reference-submission gate checks exact workflow/build/annotation versions and rejects incompatible pairings before an allocator callback. Actual Nextflow integration and published references remain pending under task 4.3.
 - A local SQLite metadata model traverses the full lineage chain, rejects missing parents, requires file URI/stage/producer/integrity fields, and archives metadata without breaking variant references (6.1 through 6.4). Its 21 tests cover persistence, legacy backfill and concurrent snapshots. Access grants and actual pipeline/storage integration remain pending; see [Data Model and Provenance](Data-Model-and-Provenance#local-metadata-implementation).
 
-The development record has **14/89 completed tasks**, with **92 local tests passing**. Task 1.1's historical evidence predates the authorized solo-maintainer policy.
+- Five real reference versions are published into a write-once zone laid out as `type/name/version`, each with a per-artifact checksum manifest. A direct overwrite is rejected by storage, and a successor version leaves the prior one retrievable (tasks 4.1, 4.2).
+
+The development record has **16/89 completed tasks**, with **101 local tests passing**. Task 1.1's historical evidence predates the authorized solo-maintainer policy.
 
 The deployed environment is disposable and billable: the provisioned share charges on capacity, IOPS and throughput whether or not it is used, and the verification client and Data Factory runtime charge while running. Tear it down when finished. Deployment is verified only in one sandbox subscription whose policies shaped the result; see [Architecture](Architecture#deployed-environment-and-platform-constraints).
 

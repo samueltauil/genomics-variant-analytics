@@ -187,6 +187,7 @@ output landingShareName string = landing.outputs.shareName
 output landingUncPath string = landing.outputs.uncPath
 output lakeStorageAccount string = lake.outputs.storageAccountName
 output lakeFilesystem string = lake.outputs.filesystemName
+output referenceContainer string = lake.outputs.referenceContainerName
 output stagingIdentityClientId string = identities.outputs.stagingClientId
 output pipelineIdentityClientId string = identities.outputs.pipelineClientId
 output ingestionIdentityClientId string = identities.outputs.ingestionClientId

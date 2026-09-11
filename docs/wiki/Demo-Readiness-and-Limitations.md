@@ -14,6 +14,7 @@
 | Object-storage taxonomy and least privilege (1.4, 2.4) | Twelve directories exist; staging identity writes, processing identity refused write and refused a landing-share listing |
 | Scheduled landing inventory and completeness (2.1, 2.2) | 21 local tests pass; the same rule runs over a local directory and the Azure Files share; failure/retry pending |
 | Staging to object storage (3.1, 3.2, 3.3) | Data Factory Copy over private endpoints stages only complete files; a growing file was skipped. Checksums are compared and a corrupted destination is marked failed and withheld; the staging record carries all six required fields. Purview lineage and lifecycle tiering pending |
+| Reference publication and immutability (4.1, 4.2) | Five pinned Ensembl versions published with per-artifact checksum manifests; overwrite rejected by container-level WORM and by the publisher; successor version leaves the prior retrievable |
 | Reference-submission gate (4.3 preparation) | 12 local tests pass; real workflow and published reference inventory integration pending |
 | Metadata lineage, file details, integrity and archival (6.1 through 6.4) | 21 synthetic local tests pass; access grants and actual pipeline/storage integration pending |
 | Nextflow, Batch, and Slurm processing | Specified only |
@@ -21,7 +22,7 @@
 | Access tiers, catalog integration, and analytics | Specified only |
 | Preflight, reset, teardown, and cost measurements | Teardown script exists and is tag-guarded; preflight, reset and cost measurement not implemented |
 
-The development task record is **14/89 completed**, including historical guardrail acceptance, and all **92 local tests pass**.
+The development task record is **16/89 completed**, including historical guardrail acceptance, and all **101 local tests pass**.
 
 The deployed environment is disposable and billable. The provisioned share charges on capacity, IOPS and throughput whether or not it is used; the verification client and Data Factory integration runtime charge while running. Deployment has been exercised in exactly one sandbox subscription, so regional availability, quota and policy differences should be expected elsewhere. No cost per delivery or per sample has been measured.
 

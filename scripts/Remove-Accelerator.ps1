@@ -33,7 +33,14 @@ function Invoke-Az {
 }
 
 if (-not $SubscriptionId) {
-    $SubscriptionId = Invoke-Az @('account', 'show', '--query', 'id', '-o', 'tsv') 'No subscription selected.'
+    # Deleting against whatever the CLI default happens to be is not acceptable.
+    $recorded = Join-Path (Split-Path -Parent $PSScriptRoot) '.azure/environment.env.json'
+    if (Test-Path -LiteralPath $recorded) {
+        $SubscriptionId = (Get-Content -LiteralPath $recorded -Raw | ConvertFrom-Json).subscriptionId
+    }
+    else {
+        $SubscriptionId = Invoke-Az @('account', 'show', '--query', 'id', '-o', 'tsv') 'No subscription selected.'
+    }
 }
 
 $group = Invoke-Az @(
@@ -42,7 +49,7 @@ $group = Invoke-Az @(
 
 $projectTag = $group.tags.project
 if ($projectTag -ne $expectedProjectTag) {
-    throw "Refusing to delete $resourceGroupName: project tag is '$projectTag', expected '$expectedProjectTag'."
+    throw "Refusing to delete ${resourceGroupName}: project tag is '$projectTag', expected '$expectedProjectTag'."
 }
 
 $resources = Invoke-Az @(
@@ -57,6 +64,33 @@ $resources | Format-Table -AutoSize | Out-String | Write-Host
 if (-not $PSCmdlet.ShouldProcess($resourceGroupName, 'delete resource group and every resource in it')) {
     Write-Host 'No changes made.'
     return
+}
+
+# An active container immutability policy blocks container and account deletion, so unlocked
+# policies are removed first. A locked policy cannot be removed and will stop this deletion.
+foreach ($account in @($resources | Where-Object type -eq 'Microsoft.Storage/storageAccounts')) {
+    $accountPath = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName" +
+                   "/providers/Microsoft.Storage/storageAccounts/$($account.name)"
+    $containers = Invoke-Az @(
+        'rest', '--method', 'get'
+        '--url', "https://management.azure.com$accountPath/blobServices/default/containers?api-version=2025-01-01"
+        '-o', 'json'
+    ) 'Could not list containers' | ConvertFrom-Json
+
+    foreach ($container in $containers.value) {
+        $policy = $container.properties.immutabilityPolicy
+        if (-not $policy) { continue }
+        if ($policy.properties.state -eq 'Locked') {
+            throw "Container $($container.name) has a locked immutability policy; it cannot be deleted until retention expires."
+        }
+        Invoke-Az @(
+            'rest', '--method', 'delete'
+            '--url', "https://management.azure.com$accountPath/blobServices/default/containers/$($container.name)/immutabilityPolicies/default?api-version=2025-01-01"
+            '--headers', "If-Match=$($policy.etag)"
+            '-o', 'none'
+        ) "Could not remove the immutability policy on $($container.name)"
+        Write-Host "  removed immutability policy on $($container.name)"
+    }
 }
 
 Invoke-Az @('group', 'delete', '--name', $resourceGroupName, '--subscription', $SubscriptionId, '--yes') 'Deletion failed'
