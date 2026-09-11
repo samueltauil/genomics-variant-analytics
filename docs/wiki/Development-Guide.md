@@ -78,6 +78,8 @@ Deployment creates billable resources. Run the plan first, and tear down when fi
 ./scripts/Test-Environment.ps1 -SkipThroughput
 ./scripts/Test-Staging.ps1
 ./scripts/Test-StagingIntegrity.ps1
+./scripts/Publish-Reference.ps1
+./scripts/Test-ReferenceData.ps1
 ./scripts/Remove-Accelerator.ps1 -EnvironmentName demo
 ```
 
@@ -101,7 +103,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because individual tasks are complete. Tasks 2.1 and 2.2 have 21 local tests; tasks 6.1 through 6.4 have 21 metadata tests; tasks 3.2 and 3.3 have 8 staging-log tests plus a live integrity check. Ingestion, taxonomy and staging tasks carry measured cloud evidence rather than local tests. The development record is **14/89 completed**, with 75 pending, including historical guardrail acceptance. The maintainer authorized zero required approvals on 2026-09-10; PRs and required checks remain in place, but the earlier independent-review/direct-push guarantee no longer applies.
+Do not archive the entire change because individual tasks are complete. Tasks 2.1 and 2.2 have 21 local tests; tasks 6.1 through 6.4 have 21 metadata tests; tasks 3.2 and 3.3 have 8 staging-log tests plus a live integrity check; tasks 4.1 and 4.2 have 9 publication tests plus live immutability evidence. Ingestion, taxonomy, staging and reference tasks carry measured cloud evidence rather than local tests. The development record is **16/89 completed**, with 73 pending, including historical guardrail acceptance. The maintainer authorized zero required approvals on 2026-09-10; PRs and required checks remain in place, but the earlier independent-review/direct-push guarantee no longer applies.
 
 ## Practical Lessons
 
@@ -117,6 +119,9 @@ Do not archive the entire change because individual tasks are complete. Tasks 2.
 - Incremental deployment does not delete role assignments removed from a template. Prune stale grants explicitly, or least privilege quietly decays.
 - `az vm run-command invoke --scripts` splits on whitespace. Pass a script file with `@path` and Unix line endings; the remote shell is `dash`, so avoid `set -o pipefail`.
 - Piping Azure CLI output in PowerShell resets `$LASTEXITCODE`. Capture the exit code before piping, or a failed command reads as success.
+- Never let a deployment script fall back to whatever subscription the CLI happens to have selected. The default changed mid-session here and a deploy targeted the wrong subscription; only a `Forbidden` response prevented it. Prefer the recorded environment and pass the subscription explicitly.
+- Test the teardown path before you need it. A `$variable:` inside a double-quoted string is parsed as a scope reference, which left the removal script unrunnable until a dry run exposed it.
+- An immutability policy blocks container and account deletion. Create it unlocked in disposable environments and remove it before teardown; a locked policy cannot be removed until retention expires.
 
 ## Maintaining the Wiki
 
