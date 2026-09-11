@@ -77,12 +77,13 @@ Deployment creates billable resources. Run the plan first, and tear down when fi
 ./scripts/Deploy-Accelerator.ps1 -EnvironmentName demo -Location eastus2 -ExpiresInDays 1
 ./scripts/Test-Environment.ps1 -SkipThroughput
 ./scripts/Test-Staging.ps1
+./scripts/Test-StagingIntegrity.ps1
 ./scripts/Remove-Accelerator.ps1 -EnvironmentName demo
 ```
 
 Deployment is idempotent and re-runnable. Every resource is tagged `project=genomics-variant-accelerator` and `lifecycle=disposable-test` with an `expiresOn` date, and the teardown script refuses a resource group that lacks the project tag. Concrete subscription, tenant and resource names are written to an untracked `.azure/environment.env.json`; this repository and its wiki are public, so those values never belong in a committed file.
 
-`Test-Environment.ps1` checks the folder taxonomy, the staging and processing grants, and the SMB mount, and takes a 100 GiB throughput measurement unless `-SkipThroughput` is passed. `Test-Staging.ps1` seeds one stable file and one that grows between two inventories, then proves the pipeline copies only the complete one. Both drive the in-network client through `az vm run-command`, because the storage data planes are private.
+`Test-Environment.ps1` checks the folder taxonomy, the staging and processing grants, and the SMB mount, and takes a 100 GiB throughput measurement unless `-SkipThroughput` is passed. `Test-Staging.ps1` seeds one stable file and one that grows between two inventories, then proves the pipeline copies only the complete one. `Test-StagingIntegrity.ps1` checksum-verifies a staged artifact, then corrupts the destination on purpose and confirms the record turns failed and drops out of the downstream set; re-run `Test-Staging.ps1` afterwards to restore an intact copy. All three drive the in-network client through `az vm run-command`, because the storage data planes are private.
 
 ## OpenSpec Workflow
 
@@ -100,7 +101,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because individual tasks are complete. Tasks 2.1 and 2.2 have 21 local tests; tasks 6.1 through 6.4 have 21 metadata tests. Ingestion, taxonomy and staging tasks carry measured cloud evidence rather than local tests. The development record is **12/89 completed**, with 77 pending, including historical guardrail acceptance. The maintainer authorized zero required approvals on 2026-09-10; PRs and required checks remain in place, but the earlier independent-review/direct-push guarantee no longer applies.
+Do not archive the entire change because individual tasks are complete. Tasks 2.1 and 2.2 have 21 local tests; tasks 6.1 through 6.4 have 21 metadata tests; tasks 3.2 and 3.3 have 8 staging-log tests plus a live integrity check. Ingestion, taxonomy and staging tasks carry measured cloud evidence rather than local tests. The development record is **14/89 completed**, with 75 pending, including historical guardrail acceptance. The maintainer authorized zero required approvals on 2026-09-10; PRs and required checks remain in place, but the earlier independent-review/direct-push guarantee no longer applies.
 
 ## Practical Lessons
 
