@@ -106,6 +106,14 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN, completion_marker=None):
                 None if parsed else "unrecognized-path",
             ))
 
+    return evaluate_inventory(
+        observations, inventory, str(root), pattern, completion_marker, observed_at,
+    )
+
+
+def evaluate_inventory(observations, inventory, source_key, pattern, completion_marker,
+                       observed_at, mode="local-only"):
+    """Apply the completeness rule to observations from any landing-zone source."""
     connection = sqlite3.connect(inventory)
     connection.row_factory = sqlite3.Row
     try:
@@ -114,9 +122,9 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN, completion_marker=None):
             if "completion_marker" not in {row["name"] for row in connection.execute("PRAGMA table_info(source)")}:
                 connection.execute("ALTER TABLE source ADD COLUMN completion_marker TEXT")
             binding = connection.execute("SELECT root, pattern, completion_marker FROM source").fetchall()
-            if binding and [tuple(row) for row in binding] != [(str(root), pattern, completion_marker)]:
+            if binding and [tuple(row) for row in binding] != [(source_key, pattern, completion_marker)]:
                 raise ValueError("Inventory is already bound to a different root, path pattern or completion marker.")
-            connection.execute("INSERT OR IGNORE INTO source VALUES (?, ?, ?)", (str(root), pattern, completion_marker))
+            connection.execute("INSERT OR IGNORE INTO source VALUES (?, ?, ?)", (source_key, pattern, completion_marker))
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS files (
                     path TEXT PRIMARY KEY, run_id TEXT, sample_id TEXT,
@@ -166,7 +174,7 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN, completion_marker=None):
         for record in records:
             record["present"] = bool(record["present"])
         return {
-            "schema_version": 2, "mode": "local-only", "observed_at": observed_at,
+            "schema_version": 2, "mode": mode, "observed_at": observed_at,
             "file_count": len(observations), "files": records,
             "completeness_evaluated": True, "azure_readiness": "not-evaluated",
         }
