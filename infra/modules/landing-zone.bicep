@@ -17,11 +17,10 @@ param deployerPrincipalId string
 @description('Private endpoints replace this in task 8.7; until then the share is reachable for acceptance testing.')
 param allowPublicNetworkAccess bool = true
 
-var smbShareContributorRoleId = '0c867c2a-1d8c-454a-a3db-ab2ea1bdc8bb'
+var smbManagedIdentityAdminRoleId = 'a235d3ee-5935-4cfb-8cc5-a3303ad5995e'
 var smbPrivilegedContributorRoleId = '69566ab7-960f-475b-8e7c-b3118f30c6bd'
-var keyOperatorRoleId = '81a9662b-bebf-436f-a333-f67b29880f12'
 
-resource account 'Microsoft.Storage/storageAccounts@2025-01-01' = {
+resource account 'Microsoft.Storage/storageAccounts@2025-08-01' = {
   name: storageAccountName
   location: location
   tags: tags
@@ -33,8 +32,14 @@ resource account 'Microsoft.Storage/storageAccounts@2025-01-01' = {
     minimumTlsVersion: 'TLS1_2'
     supportsHttpsTrafficOnly: true
     allowBlobPublicAccess: false
-    // SMB mounting authenticates with the share key until Entra Kerberos domain join exists.
-    allowSharedKeyAccess: true
+    allowSharedKeyAccess: false
+    // Clients authenticate SMB with a managed identity, so no share key exists to mount with.
+    azureFilesIdentityBasedAuthentication: {
+      directoryServiceOptions: 'None'
+      smbOAuthSettings: {
+        isSmbOAuthEnabled: true
+      }
+    }
     publicNetworkAccess: allowPublicNetworkAccess ? 'Enabled' : 'Disabled'
     networkAcls: {
       bypass: 'AzureServices'
@@ -72,11 +77,11 @@ resource share 'Microsoft.Storage/storageAccounts/fileServices/shares@2025-01-01
   }
 }
 
-resource ingestionWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+resource ingestionSmbAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: account
-  name: guid(account.id, ingestionPrincipalId, smbShareContributorRoleId)
+  name: guid(account.id, ingestionPrincipalId, smbManagedIdentityAdminRoleId)
   properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', smbShareContributorRoleId)
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', smbManagedIdentityAdminRoleId)
     principalId: ingestionPrincipalId
     principalType: 'ServicePrincipal'
   }
@@ -91,19 +96,7 @@ resource deployerVerify 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-// SMB has no Entra path on a non-domain-joined client, so the ingestion identity retrieves the share
-// key itself rather than having it passed in. Task 8.2 removes this once Kerberos exists.
-resource ingestionKeyAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: account
-  name: guid(account.id, ingestionPrincipalId, keyOperatorRoleId)
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', keyOperatorRoleId)
-    principalId: ingestionPrincipalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-// Governance disables shared-key access, so file data-plane verification runs over OAuth.
+// Data Factory reads the share over the file REST data plane with this identity.
 resource ingestionFileData 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: account
   name: guid(account.id, ingestionPrincipalId, smbPrivilegedContributorRoleId)

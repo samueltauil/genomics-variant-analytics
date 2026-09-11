@@ -57,9 +57,12 @@ These are subscription policy, not configuration defects, and must not be worked
 
 - `publicNetworkAccess` is forced to `Disabled` on storage accounts. The template requests
   `Enabled` and policy reverts it, so all data-plane access is via private endpoint.
-- `allowSharedKeyAccess` is forced to `False`. Azure Files SMB authenticates NTLMv2 with the
-  shared key, so mounting fails with `STATUS_ACCESS_DENIED` despite a reachable port 445.
-  Identity-based SMB needs AD DS or Entra Kerberos domain join, which is not deployed.
+- `allowSharedKeyAccess` is forced to `False`. Azure Files SMB NTLMv2 authenticates with that key,
+  so key-based mounting is unavailable by design. The landing account therefore enables
+  `azureFilesIdentityBasedAuthentication.smbOAuthSettings.isSmbOAuthEnabled` and clients mount with
+  `sec=krb5` as a managed identity. The property is nested under
+  `azureFilesIdentityBasedAuthentication` and requires API version 2025-08-01; setting it at the top
+  level of `properties` is silently ignored.
 - Public IP addresses cannot be created, so NAT Gateway, Azure Firewall and VM public
   addresses are unavailable. The client is driven through run-command instead.
 - Only v7-family VM sizes are unrestricted in `eastus2`.
@@ -77,11 +80,12 @@ Produced by `scripts/Test-Environment.ps1` against the deployed environment:
 | Processing identity write denied | HTTP 403 |
 | Processing identity reads | HTTP 200 |
 | Processing identity denied landing-share listing | HTTP 403 |
-| 100 GiB sequential write, file REST over private endpoint | 306 MiB/s in 335 s, 2937 throttled responses retried |
+| SMB mount as managed identity | `sec=krb5`, no storage key |
+| 100 GiB sequential write over SMB | 240 MiB/s in 426 s |
 | Share provisioned ceiling | 3000 IOPS, 200 MiB/s |
 
-The 100 GiB measurement is not the SMB acceptance task 1.3 requires; it exercises the same
-provisioned share over its REST data plane because SMB authentication is blocked by policy.
+The SMB write exceeds the provisioned rate while `allowSharedKeyAccess` stays disabled, which is the
+acceptance task 1.3 requires.
 
 ## Cost And Cleanup
 

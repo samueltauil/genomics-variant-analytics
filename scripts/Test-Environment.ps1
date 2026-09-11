@@ -117,65 +117,42 @@ else
   echo "CHECK|processing-identity-landing-read-denied|FAIL|http $code"
 fi
 
-files=$(imds_token $FILES_RESOURCE __INGESTION_CLIENT_ID__)
-if [ __RUN_THROUGHPUT__ -eq 1 ]; then
-cat >/tmp/filewrite.py <<'PYEOF'
-import concurrent.futures, sys, time, urllib.error, urllib.request
+export DEBIAN_FRONTEND=noninteractive
+if ! command -v azfilesauthmanager >/dev/null 2>&1; then
+  cd /tmp
+  curl -sSL -O https://packages.microsoft.com/config/ubuntu/24.04/packages-microsoft-prod.deb
+  dpkg -i packages-microsoft-prod.deb >/dev/null
+  rm -f packages-microsoft-prod.deb
+  apt-get update -qq
+  apt-get install -y -qq azfilesauth
+fi
 
-account, share, path, token, total_mib = sys.argv[1:6]
-total = int(total_mib) * 1024 * 1024
-chunk = 4 * 1024 * 1024
-base = "https://%s.file.core.windows.net/%s/%s" % (account, share, path)
-common = {
-    "Authorization": "Bearer " + token,
-    "x-ms-version": "2022-11-02",
-    "x-ms-file-request-intent": "backup",
-}
+azfilesauthmanager set https://__LANDING_ACCOUNT__.file.core.windows.net --imds-client-id __INGESTION_CLIENT_ID__ >/dev/null
+systemctl enable --now azfilesrefresh >/dev/null 2>&1 || true
+cruid=$(awk -F': *' '/USER_UID/ {print $2}' /etc/azfilesauth/config.yaml)
 
-def send(method, url, extra, body=None):
-    request = urllib.request.Request(url, method=method, data=body)
-    for key, value in dict(common, **extra).items():
-        request.add_header(key, value)
-    with urllib.request.urlopen(request) as response:
-        return response.status
-
-send("PUT", base, {"x-ms-type": "file", "x-ms-content-length": str(total), "Content-Length": "0"})
-buffer = b"\0" * chunk
-throttled = []
-
-def upload(offset):
-    last = min(offset + chunk, total) - 1
-    body = buffer[: last - offset + 1]
-    headers = {"x-ms-write": "update", "x-ms-range": "bytes=%d-%d" % (offset, last)}
-    delay = 0.5
-    for attempt in range(9):
-        try:
-            return send("PUT", base + "?comp=range", headers, body)
-        except urllib.error.HTTPError as error:
-            # Provisioned shares answer 503 once the provisioned rate is exceeded.
-            if error.code not in (500, 503) or attempt == 8:
-                raise
-            throttled.append(1)
-            time.sleep(delay)
-            delay = min(delay * 2, 8)
-
-started = time.time()
-with concurrent.futures.ThreadPoolExecutor(max_workers=16) as pool:
-    for _ in pool.map(upload, range(0, total, chunk)):
-        pass
-elapsed = max(time.time() - started, 0.001)
-print("%s MiB in %.0fs = %.0f MiB/s, %d throttled responses"
-      % (total_mib, elapsed, total / 1048576 / elapsed, len(throttled)))
-PYEOF
-
-if result=$(python3 /tmp/filewrite.py __LANDING_ACCOUNT__ __SHARE__ acceptance-sequential.bin "$files" __WRITE_MIB__ 2>/tmp/filewrite.log); then
-  echo "CHECK|share-sequential-write|MEASURED|$result over private endpoint (REST, not SMB)"
+umount /mnt/landing 2>/dev/null || true
+mkdir -p /mnt/landing
+OPTIONS="sec=krb5,cruid=$cruid,username=__INGESTION_CLIENT_ID__,dir_mode=0755,file_mode=0755,serverino,nosharesock,mfsymlinks,actimeo=30"
+if mount -t cifs "//__LANDING_ACCOUNT__.file.core.windows.net/__SHARE__" /mnt/landing -o "$OPTIONS" 2>/tmp/mount.log; then
+  echo "CHECK|smb-mount-managed-identity|PASS|sec=krb5 as the ingestion identity, no storage key"
 else
-  echo "CHECK|share-sequential-write|FAIL|$(tail -c 200 /tmp/filewrite.log | tr '\n' ' ')"
+  echo "CHECK|smb-mount-managed-identity|FAIL|$(tail -c 200 /tmp/mount.log | tr '\n' ' ')"
+  exit 1
 fi
 
-curl -s -o /dev/null -X DELETE -H "Authorization: Bearer $files" -H 'x-ms-version: 2022-11-02' -H 'x-ms-file-request-intent: backup' "https://__LANDING_ACCOUNT__.file.core.windows.net/__SHARE__/acceptance-sequential.bin"
+if [ __RUN_THROUGHPUT__ -eq 1 ]; then
+  mkdir -p /mnt/landing/acceptance
+  start=$(date +%s)
+  dd if=/dev/zero of=/mnt/landing/acceptance/sequential.bin bs=1M count=__WRITE_MIB__ conv=fdatasync 2>/tmp/dd.log
+  end=$(date +%s)
+  elapsed=$((end - start))
+  [ $elapsed -gt 0 ] || elapsed=1
+  echo "CHECK|smb-sequential-write|MEASURED|__WRITE_MIB__ MiB in ${elapsed}s = $((__WRITE_MIB__ / elapsed)) MiB/s over SMB"
+  rm -f /mnt/landing/acceptance/sequential.bin
 fi
+
+umount /mnt/landing
 '@
 
 $directoryList = ($environment.taxonomy | ForEach-Object { "'$_'" }) -join ' '
@@ -229,13 +206,13 @@ if (-not $results) {
 }
 
 $results + [pscustomobject]@{
-    Check  = 'smb-key-authentication'
-    Status = if ($landingAccount.allowSharedKeyAccess) { 'AVAILABLE' } else { 'BLOCKED' }
+    Check  = 'shared-key-access'
+    Status = if ($landingAccount.allowSharedKeyAccess) { 'ENABLED' } else { 'DISABLED' }
     Detail = if ($landingAccount.allowSharedKeyAccess) {
-        'shared key enabled; SMB NTLMv2 mount is possible'
+        'shared key is enabled; SMB could fall back to NTLMv2'
     }
     else {
-        'subscription policy disables allowSharedKeyAccess, which Azure Files SMB NTLMv2 requires'
+        'shared key disabled, so the SMB mount above proves identity-based access'
     }
 } + [pscustomobject]@{
     Check  = 'share-provisioned-ceiling'
@@ -243,7 +220,7 @@ $results + [pscustomobject]@{
     Detail = "$provisionedIops IOPS, $provisionedMibps MiB/s provisioned"
 } | Format-Table -AutoSize | Out-String | Write-Host
 
-$measured = $results | Where-Object Check -eq 'share-sequential-write'
+$measured = $results | Where-Object Check -eq 'smb-sequential-write'
 if ($measured -and $measured.Detail -match '= (\d+) MiB/s') {
     $rate = [int]$Matches[1]
     $ratio = [math]::Round(100 * $rate / $provisionedMibps)
