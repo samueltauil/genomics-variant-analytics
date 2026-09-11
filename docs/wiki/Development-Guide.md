@@ -68,6 +68,22 @@ Use a trusted absolute local database path, separate from the landing inventory,
 
 Azure login, subscription discovery, provisioning, uploads, benchmarks and teardown remain paused. No local test establishes cloud readiness or authorizes any of those actions. No resources were created by these local changes; existing subscription charges are unknown. Proceeding to billable deployment requires a numeric spending limit plus a dated, region-specific estimate from approved sizing and a separately authorized deployment.
 
+## Deploying and Verifying an Environment
+
+Deployment creates billable resources. Run the plan first, and tear down when finished.
+
+```powershell
+./scripts/Deploy-Accelerator.ps1 -EnvironmentName demo -Location eastus2 -WhatIf
+./scripts/Deploy-Accelerator.ps1 -EnvironmentName demo -Location eastus2 -ExpiresInDays 1
+./scripts/Test-Environment.ps1 -SkipThroughput
+./scripts/Test-Staging.ps1
+./scripts/Remove-Accelerator.ps1 -EnvironmentName demo
+```
+
+Deployment is idempotent and re-runnable. Every resource is tagged `project=genomics-variant-accelerator` and `lifecycle=disposable-test` with an `expiresOn` date, and the teardown script refuses a resource group that lacks the project tag. Concrete subscription, tenant and resource names are written to an untracked `.azure/environment.env.json`; this repository and its wiki are public, so those values never belong in a committed file.
+
+`Test-Environment.ps1` checks the folder taxonomy, the staging and processing grants, and the SMB mount, and takes a 100 GiB throughput measurement unless `-SkipThroughput` is passed. `Test-Staging.ps1` seeds one stable file and one that grows between two inventories, then proves the pipeline copies only the complete one. Both drive the in-network client through `az vm run-command`, because the storage data planes are private.
+
 ## OpenSpec Workflow
 
 The active change is `add-genomics-variant-accelerator`, using the `spec-driven` schema and repository-local planning artifacts. With OpenSpec available:
@@ -84,7 +100,7 @@ openspec validate add-genomics-variant-accelerator --strict
 4. Mark a task complete only when every specified implementation and acceptance condition is verified. Leave blocked tasks unchecked and state the missing evidence.
 5. Submit reviewed changes through a PR and keep the implementation, specs, and documentation coherent.
 
-Do not archive the entire change because individual tasks are complete. Tasks 2.1 and 2.2 have 21 local tests; tasks 6.1 through 6.4 have 21 metadata tests. The development record is **8/89 completed**, with 81 pending, including historical guardrail acceptance. Default-branch records remain stale until merge. The maintainer authorized zero required approvals on 2026-09-10; PRs and required checks remain in place, but the earlier independent-review/direct-push guarantee no longer applies. Cloud deployment and SMB acceptance are not implied by local completion.
+Do not archive the entire change because individual tasks are complete. Tasks 2.1 and 2.2 have 21 local tests; tasks 6.1 through 6.4 have 21 metadata tests. Ingestion, taxonomy and staging tasks carry measured cloud evidence rather than local tests. The development record is **12/89 completed**, with 77 pending, including historical guardrail acceptance. The maintainer authorized zero required approvals on 2026-09-10; PRs and required checks remain in place, but the earlier independent-review/direct-push guarantee no longer applies.
 
 ## Practical Lessons
 
@@ -94,10 +110,16 @@ Do not archive the entire change because individual tasks are complete. Tasks 2.
 - Test an administrator push of a passing but unapproved PR head. A zero-approval policy allowed a green, already-open PR to fast-forward during initial acceptance.
 - A Python SQLite connection context manager handles transactions but does not close the connection. Close it explicitly, including in tests, to release Windows file locks before temporary-directory cleanup.
 - Set `NO_COLOR=1` and `TERM=dumb` for captured PowerShell test output when asserting formatted field values.
+- A governed subscription may silently override template values. Read the resource back after deploying rather than trusting that the template was applied; `publicNetworkAccess` and `allowSharedKeyAccess` were both reset by policy here.
+- Azure Resource Manager can accept a misplaced property and ignore it. `smbOAuthSettings` belongs under `azureFilesIdentityBasedAuthentication`; writing it at the top level returned success and changed nothing, which looked exactly like an unsupported feature.
+- Check the API version before concluding a property is unavailable. The same write succeeded once the storage resource moved to `2025-08-01`.
+- Incremental deployment does not delete role assignments removed from a template. Prune stale grants explicitly, or least privilege quietly decays.
+- `az vm run-command invoke --scripts` splits on whitespace. Pass a script file with `@path` and Unix line endings; the remote shell is `dash`, so avoid `set -o pipefail`.
+- Piping Azure CLI output in PowerShell resets `$LASTEXITCODE`. Capture the exit code before piping, or a failed command reads as success.
 
 ## Maintaining the Wiki
 
-The Markdown sources are under `docs/wiki` on the existing `docs/project-wiki` branch, reviewed through [PR #11](https://github.com/samueltauil/genomics-variant-analytics/pull/11); they are not yet on `main`. The live wiki is already populated. `Home.md` is the landing page; `_Sidebar.md` supplies navigation. Links without file extensions name wiki pages. Keep the sources reviewable through code-repository PRs; the wiki's Git history is separate and its direct edits do not pass through this repository's required checks.
+The Markdown sources are under `docs/wiki` on `main`, reviewed through the repository's normal pull-request checks. The live wiki is a separate Git repository that mirrors them. `Home.md` is the landing page; `_Sidebar.md` supplies navigation. Links without file extensions name wiki pages. Keep the sources reviewable through code-repository PRs; the wiki's own Git history does not pass through this repository's required checks.
 
 GitHub must have an initial wiki page before its separate Git remote is available. Once `Home` has been created in the signed-in web UI:
 
