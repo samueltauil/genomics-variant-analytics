@@ -1,6 +1,6 @@
 # Architecture
 
-**Specified design, not deployed.** The goal is to preserve the laboratory's instrument configuration and folder conventions while adding storage staging, reproducible processing, and research analytics.
+**Ingestion and staging are deployed and measured; everything downstream is specified only.** The goal is to preserve the laboratory's instrument configuration and folder conventions while adding storage staging, reproducible processing, and research analytics.
 
 ## Planned Data Flow
 
@@ -47,6 +47,30 @@ flowchart TD
 6. **Reference builds are immutable.** Checksums, versioned manifests, and compatibility preflight are required before processing.
 
 The proposed object-storage taxonomy is `Ingest`, `Process`, `Failed`, `External`, `Inventory`, `ReferenceData`, and `SampleData`, with genomics modality subfolders. These are downstream storage conventions, not a requirement to rename the laboratory's existing instrument folders.
+
+## Deployed Environment and Platform Constraints
+
+A disposable environment was deployed into a sandbox subscription on 2026-09-11 and removed afterwards. Its subscription policies are ordinary for a governed tenant and shaped the design more than any preference did. Treat them as likely in customer environments rather than as local quirks.
+
+| Observed constraint | Consequence for the design |
+|---|---|
+| `publicNetworkAccess` forced to `Disabled` on storage accounts | Both data planes are reachable only through private endpoints. Any client, including the staging service, must sit inside the network. |
+| `allowSharedKeyAccess` forced to `False` | No storage account key exists. SMB cannot use NTLMv2, and every data-plane caller authenticates as a managed identity. |
+| Public IP addresses cannot be created | NAT Gateway, Azure Firewall and VM public addresses are unavailable. Administration runs through the control plane rather than inbound access. |
+| Limited VM families available in the region | Verification compute must be selected from what the region actually offers, not from a fixed size. |
+| Blob versioning unsupported on hierarchical-namespace accounts | Reference immutability cannot rely on blob versions; it needs write-once containers plus checksummed manifests. |
+
+### Identity-based SMB is the landing-zone contract
+
+Because no account key exists, the share uses **SMB OAuth with a managed identity**: the account sets `azureFilesIdentityBasedAuthentication.smbOAuthSettings.isSmbOAuthEnabled`, the ingestion identity holds **Storage File Data SMB MI Admin**, and Linux clients mount with `sec=krb5` after the `azfilesauth` package obtains a ticket from the instance metadata service. No domain join is required.
+
+Two details cost real time and are worth carrying forward. The setting is **nested under `azureFilesIdentityBasedAuthentication`**, not at the top of `properties`; a top-level write returns success and is silently ignored. It also requires storage API version `2025-08-01` or later.
+
+A 100 GiB sequential write over this mount sustained **240 MiB/s** against a provisioned 200 MiB/s ceiling, with the share reporting its provisioned 3000 IOPS.
+
+### Staging authenticates the same way
+
+Data Factory's Azure Files connector supports user-assigned managed identity, so the Copy pipeline needs no key either. It runs in a managed virtual network with managed private endpoints, reads the share as the **ingestion** identity and writes object storage as the **staging** identity, which keeps landing-zone access restricted to the identity that owns it.
 
 ## Workload Context
 
