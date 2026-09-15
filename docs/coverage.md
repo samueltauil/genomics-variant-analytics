@@ -1,0 +1,39 @@
+# Capability coverage
+
+This is the source of truth for what the repository can currently support in a presentation. It compares the ten capability specs with implementation evidence that exists in this repository.
+
+## Status definitions
+
+| Status | Meaning |
+|---|---|
+| Demonstrated | Runnable behavior exists and can be shown producing the observable results required by the capability spec. |
+| Partially demonstrated | Some capability requirements have inspectable or runnable evidence, but the capability is not complete. Show only the evidence named here. |
+| Specified only | The repository contains the behavior contract, but no implementation evidence. Describe it only as architectural intent. |
+
+Documentation, diagrams, and specifications are not evidence that data-plane behavior runs. A presenter may show a repository artifact only where the table explicitly identifies that artifact as partial evidence.
+
+## Coverage table
+
+| Capability | Status | Current evidence | Presenter guidance |
+|---|---|---|---|
+| [`ingestion/smb-landing-zone`](../openspec/changes/add-genomics-variant-accelerator/specs/ingestion/smb-landing-zone/spec.md) | **Specified only** | The SMB landing behavior is defined in the spec. There is no Azure Files template, arrival scanner, transfer-state implementation, test, or deployed share in the repository. | Describe the unchanged SMB write path as the intended architecture. Do not show or claim instrument compatibility, throughput, arrival-state detection, or retry behavior. |
+| [`ingestion/object-storage-staging`](../openspec/changes/add-genomics-variant-accelerator/specs/ingestion/object-storage-staging/spec.md) | **Specified only** | The staging behavior is defined in the spec and its platform constraints are documented in [known limitations](limitations.md). There is no copy pipeline, checksum implementation, staging log, lifecycle configuration, or lineage output. | Explain the proposed Files-to-object-storage flow and documented service constraints. Do not claim that transfer, integrity verification, tiering, classification, or lineage has run. |
+| [`processing/secondary-analysis`](../openspec/changes/add-genomics-variant-accelerator/specs/processing/secondary-analysis/spec.md) | **Specified only** | The processing stages and execution targets are defined in the spec. There is no workflow definition, container, Batch or HPC configuration, run record, output artifact, or concordance result. | Present Batch and HPC as alternative proposed targets. Do not claim FASTQ-to-VCF execution, equivalent outputs, provenance capture, failure handling, or elastic scale-down. |
+| [`variant-store/delta-variant-store`](../openspec/changes/add-genomics-variant-accelerator/specs/variant-store/delta-variant-store/spec.md) | **Specified only** | The Delta schema and ingestion behavior are defined in the spec. There is no Delta table definition, parser, ingestion job, rejected-record store, maintenance output, or sample query result. | Discuss the proposed VCF core and accelerator fields as a schema contract. Do not show or claim loaded variants, idempotency, rejection handling, provenance resolution, or query performance. |
+| [`variant-store/genomic-metadata`](../openspec/changes/add-genomics-variant-accelerator/specs/variant-store/genomic-metadata/spec.md) | **Specified only** | The metadata relationships and access boundaries are defined in the spec. There is no metadata schema implementation, populated store, traversal result, integrity check, or access-control test. | Describe the intended Subject-to-variant chain. Do not claim bidirectional traversal, referential integrity, archive behavior, or clinical/research separation. |
+| [`reference-data/reference-management`](../openspec/changes/add-genomics-variant-accelerator/specs/reference-data/reference-management/spec.md) | **Specified only** | The reference inventory, versioning, compatibility, and audit behavior are defined in the spec. There is no reference manifest, published reference zone, compatibility validator, immutability control, or audit result. | Describe versioned reference binding as required design. Do not claim that GRCh38, hg19, annotations, compatibility checks, immutability, or access auditing are available. |
+| [`governance/access-and-lineage`](../openspec/changes/add-genomics-variant-accelerator/specs/governance/access-and-lineage/spec.md) | **Specified only** | Governance requirements and claim boundaries are documented in the spec and [claim register](claim-register.md). There are no deployed identities, role assignments, private endpoints, classifications, audit records, sharing gates, or end-to-end lineage results. | Show the claim register as presentation guidance, not as proof of deployed governance. Describe controls as configurable building blocks and never claim compliance or working enforcement. |
+| [`analytics/variant-query-and-visualization`](../openspec/changes/add-genomics-variant-accelerator/specs/analytics/variant-query-and-visualization/spec.md) | **Specified only** | Query scenarios, access surfaces, visualizations, and assisted exploration are defined in the spec. There is no notebook, SQL endpoint, query implementation, dashboard/report, governed assistant, dataset result, or response-time measurement. | Describe the proposed analytics experience. Do not present screenshots, sample SQL, mock results, or AI responses as output from a working governed variant store. |
+| [`platform/engineering-workflow`](../openspec/changes/add-genomics-variant-accelerator/specs/platform/engineering-workflow/spec.md) | **Partially demonstrated** | The repository is an inspectable source of record for the OpenSpec contracts and documentation. [`.gitignore`](../.gitignore) excludes common genomic-data and credential file patterns. Repository-resident domain context includes [Copilot instructions](../.github/copilot-instructions.md), reusable [prompt files](../.github/prompts/), and the [genomics variant-store skill](../.github/skills/genomics-variant-store/SKILL.md). There is no evidence here of a required server-side data-hygiene check, protected branch, secret scanning, OIDC deployment, protected environments, immutable release, build/SBOM attestation, governed query server, automated review, or scheduled triage. | Show only the tracked specs/docs, local ignore rules, and repository AI-context artifacts. Call the ignore rules defense in depth, not enforced prevention. Do not claim supply-chain provenance, deployment controls, GitHub settings, or governed assistant data access. |
+| [`platform/demo-enablement`](../openspec/changes/add-genomics-variant-accelerator/specs/platform/demo-enablement/spec.md) | **Partially demonstrated** | Presenter safeguards exist: the [claim register](claim-register.md), [known limitations](limitations.md), draft [demo runbook](demo-runbook.md), README prerequisites/status/cost warnings, and [defect route](../CONTRIBUTING.md#reporting-a-defect). The runbook explicitly says the demo is not built. There is no preflight, provisioning entry point, measured cost, runnable presentation, failure scripts, reset, teardown, or completed dry run. | Show the documentation safeguards and use their approved wording. Do not attempt or imply an end-to-end delivery; describe every unimplemented lifecycle step as planned work. |
+
+## Presenter check
+
+Before presenting:
+
+1. Confirm the row still matches the repository and deployed environment.
+2. Demonstrate only outputs backed by current implementation evidence.
+3. Label unexercised behavior as a production consideration or architectural intent.
+4. Follow the [claim register](claim-register.md), especially the product, compliance, customer-reference, and clinical-use boundaries.
+
+Current totals: **0 Demonstrated**, **2 Partially demonstrated**, **8 Specified only**.

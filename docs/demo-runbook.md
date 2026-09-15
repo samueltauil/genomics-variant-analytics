@@ -7,7 +7,7 @@ For prerequisites, cost, and coverage, see the [README](../README.md). This docu
 ## Before you start
 
 - [ ] Read [docs/claim-register.md](claim-register.md). Every delivery depends on it.
-- [ ] Check the coverage table in the [README](../README.md#coverage). Anything marked specified only is described, never demonstrated.
+- [ ] Check the [capability coverage table](coverage.md). Anything marked specified only is described, never demonstrated; for a partially demonstrated capability, show only the evidence named there.
 - [ ] Confirm preflight passed against the target subscription and region.
 
 ## Phase 1 — Bring-up
@@ -48,7 +48,9 @@ Launch the pipeline on Batch or HPC.
 
 Show: `FASTQ → QC → alignment → BAM → variant calling → VCF`, plus workflow version, reference genome, compute pool, start and end time, outcome, log location.
 
-**The point:** same workflow definition, two execution targets, identical outputs.
+**The point:** same workflow definition, two execution targets, with
+variant-level equivalence validated by a documented concordance threshold rather
+than byte-identical files.
 
 ### 4. Build the variant store
 

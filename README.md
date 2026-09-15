@@ -70,15 +70,15 @@ Ten capability specs live in [openspec/](openspec/). Each is a behavior contract
 
 ## Coverage
 
-The engineering-workflow capability is **partially demonstrated**: its data-hygiene checker passes local synthetic tests, and live GitHub tests verify forbidden-file merge refusal and push-time rejection of a recognized synthetic credential pattern. The earlier independent-review policy also rejected unapproved administrator direct pushes; that guarantee no longer applies under the authorized solo-maintainer policy. Secret protection does not detect every sensitive value and has explicit bypass flows; see its [acceptance record and limits](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). The rest of the engineering workflow remains unverified. All other capabilities remain **specified only** in the demo environment.
+The engineering-workflow capability is **partially demonstrated**: its data-hygiene checker passes local synthetic tests, and live GitHub tests verify forbidden-file merge refusal and push-time rejection of a recognized synthetic credential pattern. The earlier independent-review policy also rejected unapproved administrator direct pushes; that guarantee no longer applies under the authorized solo-maintainer policy. Secret protection does not detect every sensitive value and has explicit bypass flows; see its [acceptance record and limits](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). The rest of the engineering workflow remains unverified. No data-plane capability is demonstrated end to end; the other capabilities remain specified only or partially demonstrated as documented in the [capability coverage table](docs/coverage.md).
 
 | State | Meaning for a customer conversation |
 |---|---|
 | Demonstrated | You can show it working |
-| Partially demonstrated | Show the part that runs; describe the rest as intent |
+| Partially demonstrated | Show only the evidenced part; describe the rest as intent |
 | **Specified only** | Describe as architectural intent. Do not imply working software. |
 
-This table gets updated as capabilities are implemented. If it says specified only, do not demo it.
+See the [capability coverage table](docs/coverage.md) for all ten capability statuses, the evidence behind each marking, and presenter guidance. If a row says specified only, do not demo it; if it says partially demonstrated, show only the evidence named in that row.
 
 The landing directory scanner has passed seeded local tests for tasks 2.1 and
 2.2, including size/mtime stability and optional completion markers. This is not
@@ -127,13 +127,15 @@ The repository itself must never hold genomic data. The data-hygiene workflow re
 
 ## Reuse
 
-Clone it and run it. See [docs/limitations.md](docs/limitations.md) for what you will run into, and [docs/demo-runbook.md](docs/demo-runbook.md) for the delivery flow.
+Clone it to review or extend the specifications; there is no runnable deployment
+yet. See [docs/limitations.md](docs/limitations.md) for the current constraints
+and [docs/demo-runbook.md](docs/demo-runbook.md) for the planned delivery flow.
 
 ## Support
 
-None. This is a demo accelerator with no support commitment and no service level. It is not a supported Microsoft offering.
-
-Found a defect that blocked a delivery? See [CONTRIBUTING.md](CONTRIBUTING.md).
+This demo accelerator has no support commitment or SLA and is not a supported
+Microsoft offering. See [SUPPORT.md](SUPPORT.md) for support expectations and
+the defect-reporting route.
 
 ## License
 
