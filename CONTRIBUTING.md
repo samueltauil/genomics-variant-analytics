@@ -1,18 +1,13 @@
 # Contributing
 
-This is a demo accelerator for Microsoft solution engineers. There is no support commitment and no service level — see [README](README.md#support).
+This is a demo accelerator for Microsoft solution engineers. There is no
+support commitment or SLA; see [SUPPORT.md](SUPPORT.md).
 
 ## Reporting a defect
 
-Open an issue. Include:
-
-- The commit you were on
-- The phase you were in — preflight, provisioning, seeding, presentation, reset, teardown
-- What you expected, from which spec or runbook step
-- What happened, with the confirming observation that was missing
-- Region and subscription type, without identifiers
-
-If it blocked a customer delivery, say so. That changes the priority.
+Follow the defect-reporting route and sanitization requirements in
+[SUPPORT.md](SUPPORT.md). If the defect blocked a customer delivery, say so in
+the issue.
 
 ## Proposing a change
 

@@ -12,11 +12,11 @@ Any new presenter-facing material gets checked against this register before it s
 
 ---
 
-## Boundary 1 — Product status
+## Boundary 1 — Released blueprint and product status
 
 **Say:**
 
-> "This is a reference architecture and accelerator built from validated genomics patterns and healthcare customer requirements."
+> "This is a reference architecture and accelerator built from validated genomics patterns and healthcare workload requirements."
 
 > "It shows how the pieces fit together on Azure. It is a starting point you would adapt, not something you would deploy as-is."
 
@@ -52,14 +52,18 @@ Compliance is a property of a customer's whole operating environment, not of an 
 
 **Say:**
 
-> "The patterns here — SMB ingestion, object-storage staging, batch or HPC processing — are in production use across genomics customers."
+> "This architecture brings together established Azure patterns for genomics ingestion, object-storage staging, batch or HPC processing, and analytics."
+
+> "We can discuss a customer example only when the evidence and approval are current for the exact statement."
 
 **Do not say:**
 
+- "These patterns are in production use across genomics customers"
+- "Customers use this accelerator in production" or any similarly broad, unsupported deployment claim
 - Any named customer attribution for *this* accelerator
 - Any customer name carried over from earlier drafts of this material — those attributions are unverified and must not be used
 
-Name a customer only when you have a cleared, current reference for the specific claim you are making.
+Do not infer customer deployment from general architecture patterns. Name a customer or describe customer production use only when you have a cleared, current reference for the specific claim you are making.
 
 ---
 
@@ -81,33 +85,15 @@ Assisted output is labelled exploratory in the product surface, and should be de
 
 ---
 
-## Boundary 5 — What is built
+## Presenter review checklist
 
-**Say:**
+Complete this review before presenter-facing material ships or is delivered:
 
-> "Here is what runs today, and here is what is specified but not yet built."
-
-**Do not say:**
-
-- Anything that implies a specified-only capability is working software
-- "We can show you that" for something in the specified-only column
-
-Check the coverage table in the [README](../README.md#coverage) before every delivery. It is the source of truth for this boundary, and it changes as capabilities land.
-
----
-
-## Boundary 6 — Design assumptions
-
-Several design elements are **proposed**, not confirmed. Present them as reasonable defaults you would validate with the customer, not as settled design:
-
-- The eight-column VCF schema — the source material requires eight columns but does not enumerate them; the specs use the standard VCF core
-- The hereditary-cancer demo scenario and its query set
-- The specific visualization screens
-- Delta partitioning and optimization strategy
-- Query-performance targets and accelerator KPIs
-- Full Microsoft Purview implementation, and the specific choice of Databricks, Fabric, Azure ML, or AI Foundry
-
-**Say:** "This is the shape we would propose — we would validate it against your data volumes and workflows."
+- **Scope:** List every reviewed presenter-facing file, including slides, speaker notes, scripts, demos, and handouts.
+- **Attribution:** For every customer name, customer-use statement, or production-use statement, record the supporting evidence and confirm that approval is current for the exact wording. Remove or qualify the statement when either is missing.
+- **Coverage and assumptions:** Check every demonstrated or described capability against the [capability coverage table](coverage.md). Distinguish what runs today from what is specified only, and label proposed defaults as assumptions to validate. This includes the VCF schema, demo scenario and queries, visualizations, Delta strategy, performance targets or KPIs, Purview scope, and analytics-service choices.
+- **Contextual searches:** Search the reviewed files for customer names and terms such as `customer`, `production`, `deployed`, `blueprint`, `generally available`, `supported`, `compliant`, `HIPAA`, `GDPR`, `clinical`, `diagnoses`, and `pathogenicity`. Inspect each match in context and record its disposition rather than treating a zero-match search as sufficient review.
+- **Review record:** Record the reviewed files, reviewer, review date, result (`pass` or `changes required`), evidence or approval checked, coverage or assumptions checked, search terms used, and how every flagged match was resolved.
 
 ---
 
