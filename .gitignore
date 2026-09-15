@@ -28,8 +28,18 @@ context/
 *.key
 *.pfx
 local.settings.json
+/AzuriteConfig
+/__azurite_db_*.json
+/__blobstorage__/
+/__queuestorage__/
+*.sqlite3
+*.sqlite3-*
 *.tfvars
 !example.tfvars
+
+# Deployed environment identifiers. Subscription and tenant ids never enter this repository.
+/.azure/*.env.json
+/.azure/*.local.*
 
 # Build and tooling
 node_modules/

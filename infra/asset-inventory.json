@@ -1,0 +1,94 @@
+{
+  "$schema": "./asset-inventory.schema.json",
+  "schemaVersion": 1,
+  "mode": "local-only",
+  "status": "candidate-awaiting-review",
+  "iacLanguage": "bicep",
+  "analyticsEngine": "undecided",
+  "assets": [
+    {
+      "id": "network",
+      "tasks": ["8.7"],
+      "dependsOn": [],
+      "deliverables": ["VNet and workload subnets", "Private endpoints and service-specific private DNS links", "NSGs and explicit connectivity requirements"],
+      "openDecisions": ["Address space and lab routing/DNS integration", "Private runner and integration-runtime connectivity"]
+    },
+    {
+      "id": "identities",
+      "tasks": ["2.4", "8.1", "8.2", "10.1"],
+      "dependsOn": [],
+      "deliverables": ["Separate ingestion, staging, processing, reference-publisher and query identities", "Least-privilege scoped grants", "Separate deployment identities and OIDC trust definitions"],
+      "openDecisions": ["SMB directory authentication and instrument service-account integration", "Deployment identity bootstrap and allowed release subjects"]
+    },
+    {
+      "id": "smb-landing",
+      "tasks": ["1.3", "2.4"],
+      "dependsOn": ["network", "identities"],
+      "deliverables": ["Classic Microsoft.Storage SSD provisioned-v2 SMB share", "Explicit capacity, IOPS, throughput and SMB Multichannel settings", "Private file endpoint and ingestion-only access"],
+      "openDecisions": ["Region, redundancy, capacity, IOPS and throughput", "Existing UNC path preservation and directory ACLs"]
+    },
+    {
+      "id": "object-storage",
+      "tasks": ["1.4", "4.1", "4.2", "8.1", "8.7"],
+      "dependsOn": ["network", "identities"],
+      "deliverables": ["Separate HNS-enabled ADLS account", "Private blob and dfs endpoints", "Idempotent data-plane initializer for taxonomy and genomics paths", "Reference-version immutability and isolated access scopes"],
+      "openDecisions": ["Lowercase container names versus case-preserving taxonomy directories", "HNS-compatible write-once reference mechanism", "Per-zone RBAC and ACL policy"]
+    },
+    {
+      "id": "secrets-audit",
+      "tasks": ["4.4", "8.2", "8.6"],
+      "dependsOn": ["network", "identities"],
+      "deliverables": ["Private Key Vault with RBAC, soft-delete and purge protection", "Diagnostic destinations and per-service settings", "Audit retention inaccessible for modification by recorded principals"],
+      "openDecisions": ["Retention durations and independent audit administration", "Diagnostic service support and private ingestion requirements"]
+    },
+    {
+      "id": "staging",
+      "tasks": ["2.1", "2.2", "2.3", "3.1", "3.2", "3.3"],
+      "dependsOn": ["smb-landing", "object-storage", "secrets-audit"],
+      "deliverables": ["Scheduled scanner hosting and invocation assets", "Data Factory Copy definitions consuming complete-file inventory", "Integration runtime, linked services and checksum/status contracts"],
+      "openDecisions": ["Azure versus Fabric Data Factory", "Private SMB connector authentication and runtime placement", "Durable inventory and staging-log backend"]
+    },
+    {
+      "id": "catalog-lifecycle",
+      "tasks": ["3.4", "3.5", "8.5", "8.9"],
+      "dependsOn": ["staging"],
+      "deliverables": ["Purview integration and registration assets", "Blob-side Storage Actions tasks and assignments", "Classification and coarse-lineage configuration"],
+      "openDecisions": ["Purview account/integration prerequisites", "Storage Actions HNS feature compatibility and age thresholds"]
+    },
+    {
+      "id": "container-registry",
+      "tasks": ["10.4", "10.5", "10.6"],
+      "dependsOn": ["network", "identities", "secrets-audit"],
+      "deliverables": ["Private ACR with admin credentials disabled", "Scoped image-pull and publication grants", "Build, provenance and SBOM workflow assets without active publishing"],
+      "openDecisions": ["Private builder connectivity and supported registry SKU"]
+    },
+    {
+      "id": "batch",
+      "tasks": ["5.2", "5.7"],
+      "dependsOn": ["object-storage", "container-registry"],
+      "deliverables": ["Batch account and private pool configuration", "Managed-identity access and zero-idle-node policy", "Nextflow executor configuration with explicit references"],
+      "openDecisions": ["VM SKU, image, pool allocation mode and quota", "Required outbound access and private node-management connectivity"]
+    },
+    {
+      "id": "hpc",
+      "tasks": ["5.3", "5.7"],
+      "dependsOn": ["object-storage", "container-registry"],
+      "deliverables": ["Separate Slurm campaign infrastructure", "Ephemeral Azure Managed Lustre scratch with HSM import/export", "Nextflow executor and campaign teardown definitions"],
+      "openDecisions": ["Slurm/CycleCloud topology, images and quota", "Lustre capacity, SKU, subnet and campaign lifecycle"]
+    },
+    {
+      "id": "analytics",
+      "tasks": ["6.1", "6.5", "7.1", "7.9", "8.3", "8.4", "9.2", "10.8"],
+      "dependsOn": ["object-storage", "secrets-audit"],
+      "deliverables": ["Engine-specific research and clinical workspace modules", "Governed metadata and Delta initialization assets", "OneLake shortcuts, notebook/SQL grants and query-interface hosting"],
+      "openDecisions": ["Fabric versus Databricks deployment engine", "Metadata backend, referential integrity and subject-linkage grants", "MCP/query-interface hosting"]
+    },
+    {
+      "id": "delivery",
+      "tasks": ["10.1", "10.2", "11.1", "11.2", "11.3", "11.4", "11.5", "11.9", "11.10"],
+      "dependsOn": ["catalog-lifecycle", "batch", "hpc", "analytics"],
+      "deliverables": ["Parameterized local examples and compiled-template tests", "Local validation and later separately authorized cloud preflight", "Fail-closed deployment approval, reset and teardown entry points", "Sized cost and prerequisite manifests"],
+      "openDecisions": ["Explicit resource-plan approval before IaC generation", "Separate future authorization for any Azure access", "Region, capacity, costs and protected release environments"]
+    }
+  ]
+}
