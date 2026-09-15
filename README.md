@@ -2,8 +2,8 @@
 
 **Sequencer → governed variant store on Azure.** Keep the laboratory's SMB write path untouched while moving storage, compute, governance, and analytics into Azure, ending in a Delta-based variant store that is queryable and traceable to its source files.
 
-> **Status: implementation started. Nothing here is deployable yet.**
-> The repository data-hygiene checker and workflows are installed. PRs and passing checks remain required; the user-authorized solo-maintainer policy requires no independent approval. The earlier administrator-rejection tests describe the previous policy, not a current direct-push guarantee. Secret scanning and push protection are enabled, with a [synthetic credential push rejected](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). A [candidate infrastructure inventory and local-only validator](infra/README.md) and [scheduled local landing inventory](docs/landing-inventory.md) are available; IaC templates, processing pipelines and notebooks are not implemented. Azure operations are paused. See [Coverage](#coverage) for what that means in a customer conversation.
+> **Status: partial implementation; no end-to-end demo.**
+> OpenSpec progress is **21/89 tasks complete**. Repository guardrails, a partial Azure storage/staging foundation, reference publication, a local landing inventory, a local metadata model, repository AI context, and presenter safeguards have evidence. A disposable Azure foundation was deployed and acceptance-tested on September 10-11, 2026, as recorded in the tracked [deployment plan](.azure/deployment-plan.md); this reconciliation did not verify that the environment still exists. Secondary analysis, the Delta variant store, and analytics remain specified only. See [Coverage](#coverage) for the exact presentation boundary.
 
 ## What this is, and what it is not
 
@@ -70,7 +70,7 @@ Ten capability specs live in [openspec/](openspec/). Each is a behavior contract
 
 ## Coverage
 
-The engineering-workflow capability is **partially demonstrated**: its data-hygiene checker passes local synthetic tests, and live GitHub tests verify forbidden-file merge refusal and push-time rejection of a recognized synthetic credential pattern. The earlier independent-review policy also rejected unapproved administrator direct pushes; that guarantee no longer applies under the authorized solo-maintainer policy. Secret protection does not detect every sensitive value and has explicit bypass flows; see its [acceptance record and limits](CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10). The rest of the engineering workflow remains unverified. No data-plane capability is demonstrated end to end; the other capabilities remain specified only or partially demonstrated as documented in the [capability coverage table](docs/coverage.md).
+Current coverage totals are **0 Demonstrated**, **7 Partially demonstrated**, and **3 Specified only**. No capability is complete enough to present as demonstrated, and no data-plane flow runs end to end. The partially demonstrated capabilities are SMB landing, object-storage staging, genomic metadata, reference management, governance building blocks, engineering workflow, and demo enablement. Secondary analysis, the Delta variant store, and analytics are specified only.
 
 | State | Meaning for a customer conversation |
 |---|---|
@@ -78,29 +78,18 @@ The engineering-workflow capability is **partially demonstrated**: its data-hygi
 | Partially demonstrated | Show only the evidenced part; describe the rest as intent |
 | **Specified only** | Describe as architectural intent. Do not imply working software. |
 
-See the [capability coverage table](docs/coverage.md) for all ten capability statuses, the evidence behind each marking, and presenter guidance. If a row says specified only, do not demo it; if it says partially demonstrated, show only the evidence named in that row.
-
-The landing directory scanner has passed seeded local tests for tasks 2.1 and
-2.2, including size/mtime stability and optional completion markers. This is not
-an SMB/cloud demonstration; failed-transfer handling and staging remain pending.
-See [local inventory scope](docs/landing-inventory.md). An executor-independent
-[reference submission gate](docs/reference-submission.md) rejects incompatible
-build/annotation versions locally; actual workflow integration is still pending.
-The [local metadata model](docs/metadata-store.md) passes synthetic tests for
-bidirectional lineage, file details, referential integrity and metadata-only
-archival (tasks 6.1 through 6.4). It is not an access-controlled service;
-integration with pipeline outputs remains pending. OpenSpec progress is 8/89
-tasks complete, including historical guardrail acceptance under the earlier policy.
+See the [capability coverage table](docs/coverage.md) for all ten statuses, evidence, limitations, and presenter guidance. Historical cloud acceptance is evidence only for the checks recorded in the repository; it is not proof of a currently deployed environment. Local evidence includes the [landing inventory](docs/landing-inventory.md), [metadata model](docs/metadata-store.md), staging log, reference publisher, data-hygiene tests, and [reference submission gate](docs/reference-submission.md). The submission gate prepares task 4.3 but is not integrated with a workflow, so that task remains unchecked.
 
 ## Prerequisites
 
-For local infrastructure preparation, use PowerShell 7.2+, Python 3.10+ and Git;
-no Azure account or CLI is needed. See the [local commands](infra/README.md#run-locally).
+For local validation, use PowerShell 7.2+, Python 3.10+ and Git; no Azure account
+or CLI is needed. See the [local commands](infra/README.md#run-locally).
 The [local write smoke test](infra/README.md#local-write-smoke-test) verifies
 synthetic write integrity and cleanup without using Azure or SMB.
 
-A future cloud preflight check will verify the following. It is not implemented
-or authorized in the current local-only phase; treat this list as planning input.
+A future cloud preflight check will verify the following. It is not implemented,
+so the existing deployment script is not a turnkey or currently authorized
+delivery entry point; treat this list as planning input.
 
 - An Azure subscription you can create resources in, with the roles needed to assign RBAC and create federated credentials
 - Quota for the Batch or HPC pool sizing you intend to run
@@ -110,10 +99,11 @@ or authorized in the current local-only phase; treat this list as planning input
 
 ## Cost
 
-Azure access and provisioning remain paused. No cloud resources were created or
-charged by the local implementation commands. Before any billable action, a
-dated, region-specific estimate based on approved sizing and an explicit spending
-limit are required. Local checks are not a deployment authorization.
+This reconciliation did not query Azure, so current resources and charges are
+unknown. The tracked disposable acceptance deployment does not provide a current
+cost estimate or authorization for another billable run. Before any new billable
+action, produce a dated, region-specific estimate based on approved sizing and an
+explicit spending limit.
 
 Not yet estimated. Once provisioning exists, this section will state per-delivery cost, idle cost, the resources that dominate each, and the date and region the estimate was produced for.
 
@@ -121,15 +111,17 @@ Until then: Azure Managed Lustre and provisioned-v2 SSD file shares are the two 
 
 ## Data
 
-Demo data is **synthetic or openly licensed**. Variant content comes from Illumina Platinum Genomes via Azure Open Datasets; subject, sample, and cohort identifiers are generated. No real patient-identifiable data is used, and none should be added.
+Demo data must be **synthetic or openly licensed**. The planned dataset uses Illumina Platinum Genomes with generated subject, sample, and cohort identifiers, but dataset assembly and landing-zone seeding remain pending. No real patient-identifiable data is used, and none should be added.
 
 The repository itself must never hold genomic data. The data-hygiene workflow rejects genomic file extensions and Git blobs over 1 MiB. It is a required merge gate on `main`; forks must repeat the [administrator setup and acceptance checks](CONTRIBUTING.md#administrator-setup-and-acceptance). This does not prevent publication to unprotected branches or forks.
 
 ## Reuse
 
-Clone it to review or extend the specifications; there is no runnable deployment
-yet. See [docs/limitations.md](docs/limitations.md) for the current constraints
-and [docs/demo-runbook.md](docs/demo-runbook.md) for the planned delivery flow.
+Clone it to review the specifications and the partial implementation. The
+storage/staging foundation is not a complete or turnkey deployment, and there is
+no runnable end-to-end demo. See [docs/limitations.md](docs/limitations.md) for
+the current constraints and [docs/demo-runbook.md](docs/demo-runbook.md) for the
+planned delivery flow.
 
 ## Support
 
