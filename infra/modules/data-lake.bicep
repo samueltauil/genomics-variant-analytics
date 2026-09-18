@@ -22,7 +22,7 @@ param pipelinePrincipalId string
 param deployerPrincipalId string
 
 @description('Private endpoints replace this in task 8.7; until then the account is reachable for acceptance testing.')
-param allowPublicNetworkAccess bool = true
+param allowPublicNetworkAccess bool = false
 
 var blobDataContributorRoleId = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 var blobDataReaderRoleId = '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'

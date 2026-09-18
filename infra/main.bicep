@@ -37,14 +37,13 @@ param deployVerificationClient bool = true
 @description('Size of the verification client. Only unrestricted sizes in the target region will deploy.')
 param verificationClientSize string = 'Standard_D4s_v7'
 
-param deployedOn string = utcNow('yyyy-MM-ddTHH:mm:ssZ')
-
+// A utcNow() default would re-stamp every tagged resource on each run and make an unchanged
+// environment report drift, so the deployment timestamp stays in the deployment history instead.
 var tags = {
   project: 'genomics-variant-accelerator'
   lifecycle: 'disposable-test'
   environment: environmentName
   expiresOn: expiresOn
-  deployedOn: deployedOn
 }
 
 var suffix = uniqueString(subscription().id, environmentName)
