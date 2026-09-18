@@ -71,13 +71,24 @@ if (-not $PSCmdlet.ShouldProcess($resourceGroupName, 'delete resource group and 
 foreach ($account in @($resources | Where-Object type -eq 'Microsoft.Storage/storageAccounts')) {
     $accountPath = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName" +
                    "/providers/Microsoft.Storage/storageAccounts/$($account.name)"
-    $containers = Invoke-Az @(
-        'rest', '--method', 'get'
-        '--url', "https://management.azure.com$accountPath/blobServices/default/containers?api-version=2025-01-01"
-        '-o', 'json'
-    ) 'Could not list containers' | ConvertFrom-Json
+    # A Files-only account has no blob service, and asking for its containers is a Bad Request
+    # rather than an empty list, so skip it instead of failing the whole teardown.
+    $listed = & az rest --method get `
+        --url "https://management.azure.com$accountPath/blobServices/default/containers?api-version=2025-01-01" `
+        -o json 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        if ("$listed" -match 'FeatureNotSupportedForAccount') {
+            Write-Host "  $($account.name) has no blob service; no container policy to remove."
+            continue
+        }
+        throw "Could not list containers on $($account.name)`n$listed"
+    }
+    $containers = "$listed" | ConvertFrom-Json
 
     foreach ($container in $containers.value) {
+        # Strict mode turns an absent property into a terminating error, and most containers
+        # carry no immutability policy at all.
+        if ($container.properties.PSObject.Properties.Name -notcontains 'immutabilityPolicy') { continue }
         $policy = $container.properties.immutabilityPolicy
         if (-not $policy) { continue }
         if ($policy.properties.state -eq 'Locked') {
