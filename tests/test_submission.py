@@ -20,7 +20,9 @@ class SubmissionTests(unittest.TestCase):
             {"type": "gene-annotation", "name": "synthetic-genes", "version": "v1"},
         ]
         self.request = {"run_id": "SYN-RUN-001", "workflow_id": "synthetic-workflow",
-                        "workflow_version": "v1", "references": copy.deepcopy(self.references)}
+                        "workflow_version": "v1", "reference_build": "GRCh38",
+                        "reference_version": "synthetic-v1",
+                        "references": copy.deepcopy(self.references)}
         self.compatibility = {"schema_version": 1, "workflows": [{
             "workflow_id": "synthetic-workflow", "workflow_version": "v1",
             "reference_sets": [copy.deepcopy(self.references)],
@@ -73,6 +75,17 @@ class SubmissionTests(unittest.TestCase):
             with self.subTest(references=references):
                 self.request = dict(original, references=references)
                 self.assert_rejected("reference set")
+
+    def test_missing_explicit_build_identity_is_rejected(self):
+        for field in ("reference_build", "reference_version"):
+            with self.subTest(field=field):
+                self.request.pop(field)
+                self.assert_rejected("exactly")
+                self.request[field] = "GRCh38" if field == "reference_build" else "synthetic-v1"
+
+    def test_mismatched_explicit_build_identity_never_allocates(self):
+        self.request["reference_build"] = "hg19"
+        self.assert_rejected("reference_build/reference_version")
 
     def test_missing_extra_or_duplicate_annotation_is_rejected(self):
         for references in ([self.references[0]], self.references + [self.references[1]],

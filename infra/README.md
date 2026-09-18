@@ -151,8 +151,8 @@ authorization, and add no automatic deployment trigger.
 OpenSpec progress is **8/89 completed tasks**, including the separately implemented
 [local scheduled inventory and completeness checks](../docs/landing-inventory.md)
 in tasks 2.1 and 2.2 and [local metadata lineage/integrity](../docs/metadata-store.md)
-in tasks 6.1 through 6.4 (lineage, file details, integrity and metadata-only archival). The [local reference submission gate](../docs/reference-submission.md)
-prepares task 4.3 but is not connected to a real workflow or published reference inventory.
+in tasks 6.1 through 6.4 (lineage, file details, integrity and metadata-only archival). The [reference submission gate](../docs/reference-submission.md)
+integrates the local workflow submission path with the published-reference abstraction for task 4.3; it does not claim a deployed cloud workflow.
 This preparation does not
 complete tasks 1.3 or 1.4, or any cloud acceptance task. The 100 GiB SMB benchmark,
 observed IOPS ceiling, directory/ACL tests, denied-access cases, repeat deployment,

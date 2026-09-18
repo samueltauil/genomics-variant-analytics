@@ -1,9 +1,11 @@
+import json
 import re
 import sqlite3
 from urllib.parse import unquote, urlsplit
 
 from scripts.scan_landing import local_path
 from scripts.validate_submission import fields, text
+from scripts.governance import AuthorizationError, GovernancePolicy, synthetic_id
 
 
 PARENT_KINDS = {
@@ -22,12 +24,12 @@ FILE_STAGES = {
     "fastq": "sequencing", "bam": "alignment", "cram": "alignment",
     "vcf": "variant-calling", "gvcf": "variant-calling",
 }
-
-
-def synthetic_id(value):
-    if not isinstance(value, str) or re.fullmatch(r"SYN-[A-Z0-9][A-Z0-9_-]*", value) is None:
-        raise ValueError("Metadata identifiers must match SYN-[A-Z0-9][A-Z0-9_-]*.")
-    return value
+METADATA_DOMAINS = frozenset({"research", "clinical"})
+ACCESS_GRANTS = frozenset({"research_metadata", "clinical_metadata", "subject_linkage"})
+METADATA_FIELDS = {
+    "research": frozenset({"assay_type", "cohort_id", "study_arm", "study_id"}),
+    "clinical": frozenset({"clinical_status", "diagnosis_code", "phenotype_code"}),
+}
 
 
 class MetadataStore:
@@ -63,7 +65,7 @@ class MetadataStore:
                     self._connection.execute("CREATE INDEX links_child ON links(child_id)")
                     self._connection.execute(f"PRAGMA application_id = {APPLICATION_ID}")
                     self._connection.execute("PRAGMA user_version = 1")
-            elif application != APPLICATION_ID or version not in {1, 2}:
+            elif application != APPLICATION_ID or version not in {1, 2, 3}:
                 raise ValueError("Database is not a supported genomic metadata store.")
             if version < 2:
                 with self._connection:
@@ -99,6 +101,28 @@ class MetadataStore:
                         )
                     """)
                     self._connection.execute("PRAGMA user_version = 2")
+            if version < 3:
+                with self._connection:
+                    self._connection.execute("BEGIN IMMEDIATE")
+                    for domain in METADATA_DOMAINS:
+                        self._connection.execute(f"""
+                            CREATE TABLE IF NOT EXISTS {domain}_metadata (
+                                sample_id TEXT PRIMARY KEY NOT NULL
+                                    REFERENCES entities(entity_id) ON DELETE RESTRICT,
+                                attributes_json TEXT NOT NULL
+                            )
+                        """)
+                    self._connection.execute("""
+                        CREATE TABLE IF NOT EXISTS access_grants (
+                            principal_id TEXT NOT NULL,
+                            grant_name TEXT NOT NULL CHECK (grant_name IN (
+                                'research_metadata', 'clinical_metadata', 'subject_linkage'
+                            )),
+                            PRIMARY KEY (principal_id, grant_name)
+                        )
+                    """)
+                    self._connection.execute("PRAGMA user_version = 3")
+            self.governance = GovernancePolicy(self._connection)
         except Exception:
             self._connection.close()
             raise
@@ -160,8 +184,10 @@ class MetadataStore:
             if kind in FILE_STAGES:
                 self._insert_file_metadata(entity_id, kind, file_metadata)
 
-    def add_pipeline_run(self, run_id, workflow_id, workflow_version):
+    def add_pipeline_run(self, run_id, workflow_id, workflow_version,
+                         principal_id="SYN-SYSTEM-PIPELINE"):
         synthetic_id(run_id)
+        synthetic_id(principal_id, "principal_id")
         text(workflow_id, "workflow_id")
         text(workflow_version, "workflow_version")
         with self._connection:
@@ -172,6 +198,188 @@ class MetadataStore:
             self._connection.execute(
                 "INSERT INTO producing_runs (run_id, workflow_id, workflow_version) VALUES (?, ?, ?)",
                 (run_id, workflow_id, workflow_version),
+            )
+            self.governance.record_pipeline_execution(
+                principal_id, run_id, workflow_id=workflow_id,
+                workflow_version=workflow_version, outcome="registered",
+            )
+
+    def set_research_metadata(self, sample_id, attributes):
+        self._set_metadata("research", sample_id, attributes)
+
+    def set_clinical_metadata(self, sample_id, attributes):
+        self._set_metadata("clinical", sample_id, attributes)
+
+    def _set_metadata(self, domain, sample_id, attributes):
+        synthetic_id(sample_id)
+        if domain not in METADATA_DOMAINS:
+            raise ValueError("Unsupported metadata domain.")
+        if not isinstance(attributes, dict) or not attributes:
+            raise ValueError("Metadata attributes must be a non-empty dictionary.")
+        if set(attributes) - METADATA_FIELDS[domain]:
+            raise ValueError(f"Unsupported {domain} metadata attribute.")
+        for key, value in attributes.items():
+            if value is not None and not isinstance(value, (str, int, float, bool)):
+                raise ValueError(f"{key} must be a scalar value or null.")
+        payload = json.dumps(
+            attributes, allow_nan=False, separators=(",", ":"), sort_keys=True
+        )
+        with self._connection:
+            sample = self._connection.execute(
+                "SELECT kind FROM entities WHERE entity_id = ?", (sample_id,)
+            ).fetchone()
+            if sample is None or sample["kind"] != "sample":
+                raise ValueError(f"No sample with identifier: {sample_id}")
+            self._connection.execute(
+                f"""INSERT INTO {domain}_metadata (sample_id, attributes_json) VALUES (?, ?)
+                    ON CONFLICT(sample_id) DO UPDATE
+                    SET attributes_json = excluded.attributes_json""",
+                (sample_id, payload),
+            )
+
+    def grant_access(self, principal_id, grant_name):
+        synthetic_id(principal_id)
+        if grant_name not in ACCESS_GRANTS:
+            raise ValueError("Unsupported metadata grant.")
+        with self._connection:
+            self._connection.execute(
+                "INSERT INTO access_grants (principal_id, grant_name) VALUES (?, ?)",
+                (principal_id, grant_name),
+            )
+
+    def revoke_access(self, principal_id, grant_name):
+        synthetic_id(principal_id)
+        if grant_name not in ACCESS_GRANTS:
+            raise ValueError("Unsupported metadata grant.")
+        with self._connection:
+            result = self._connection.execute(
+                "DELETE FROM access_grants WHERE principal_id = ? AND grant_name = ?",
+                (principal_id, grant_name),
+            )
+            if result.rowcount != 1:
+                raise ValueError("Metadata grant does not exist.")
+
+    def read_sample_metadata(self, principal_id, sample_id):
+        grants = self._grants(principal_id)
+        domains = [
+            domain for domain in ("research", "clinical")
+            if f"{domain}_metadata" in grants
+        ]
+        if not domains:
+            raise AuthorizationError(
+                f"Principal {principal_id} has no metadata-domain grant."
+            )
+        self._sample(sample_id)
+        result = {"sample_id": sample_id}
+        for domain in domains:
+            row = self._connection.execute(
+                f"SELECT attributes_json FROM {domain}_metadata WHERE sample_id = ?",
+                (sample_id,),
+            ).fetchone()
+            result[domain] = json.loads(row["attributes_json"]) if row else None
+        self.governance.audit.record(
+            "data_access", principal_id, "read_sample_metadata",
+            {"sample_id": sample_id, "domains": domains, "subject_linked": False},
+        )
+        return result
+
+    def read_research_metadata(self, principal_id, sample_id):
+        return self._read_domain_metadata(principal_id, sample_id, "research")
+
+    def read_clinical_metadata(self, principal_id, sample_id):
+        return self._read_domain_metadata(principal_id, sample_id, "clinical")
+
+    def _read_domain_metadata(self, principal_id, sample_id, domain):
+        self._require_grant(principal_id, f"{domain}_metadata")
+        self._sample(sample_id)
+        row = self._connection.execute(
+            f"SELECT attributes_json FROM {domain}_metadata WHERE sample_id = ?",
+            (sample_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"No {domain} metadata for sample: {sample_id}")
+        result = json.loads(row["attributes_json"])
+        self.governance.audit.record(
+            "data_access", principal_id, f"read_{domain}_metadata",
+            {"sample_id": sample_id, "domain": domain, "subject_linked": domain == "clinical"},
+        )
+        return result
+
+    def resolve_subject(self, principal_id, sample_id):
+        self._require_grant(principal_id, "subject_linkage")
+        self._sample(sample_id)
+        subject = self._connection.execute("""
+            SELECT parent_id FROM links
+            JOIN entities ON entities.entity_id = links.parent_id
+            WHERE child_id = ? AND entities.kind = 'subject'
+        """, (sample_id,)).fetchone()
+        if subject is None:
+            raise ValueError(f"Sample has no subject linkage: {sample_id}")
+        self.governance.audit.record(
+            "data_access", principal_id, "resolve_subject",
+            {"sample_id": sample_id, "subject_linked": True},
+        )
+        return subject["parent_id"]
+
+    def grant_tier(self, principal_id, access_tier):
+        self.governance.grant_tier(principal_id, access_tier)
+
+    def revoke_tier(self, principal_id, access_tier):
+        self.governance.revoke_tier(principal_id, access_tier)
+
+    def grant_capability(self, principal_id, capability):
+        self.governance.grant_capability(principal_id, capability)
+
+    def grant_workspace(self, principal_id, workspace):
+        self.governance.grant_workspace(principal_id, workspace)
+
+    def transfer_workspace(self, principal_id, source, destination, dataset, approval_id=None):
+        return self.governance.transfer_workspace(
+            principal_id, source, destination, dataset, approval_id
+        )
+
+    def record_reprocessing(self, principal_id, sample_id, prior_pipeline_version,
+                            new_pipeline_version):
+        return self.governance.record_reprocessing(
+            principal_id, sample_id, prior_pipeline_version, new_pipeline_version
+        )
+
+    def authorize_raw_file(self, principal_id, artifact_uri):
+        return self.governance.authorize_raw_file(principal_id, artifact_uri)
+
+    def authorize_variant_store(self, principal_id):
+        return self.governance.authorize_variant_store(principal_id)
+
+    def read_cohort_aggregates(self, principal_id, aggregate):
+        return self.governance.read_cohort_aggregates(principal_id, aggregate)
+
+    def audit_entries(self):
+        return self.governance.audit.entries()
+
+    def verify_audit(self):
+        return self.governance.audit.verify()
+
+    def _sample(self, sample_id):
+        synthetic_id(sample_id)
+        sample = self._connection.execute(
+            "SELECT kind FROM entities WHERE entity_id = ?", (sample_id,)
+        ).fetchone()
+        if sample is None or sample["kind"] != "sample":
+            raise ValueError(f"No sample with identifier: {sample_id}")
+
+    def _grants(self, principal_id):
+        synthetic_id(principal_id)
+        return {
+            row["grant_name"] for row in self._connection.execute(
+                "SELECT grant_name FROM access_grants WHERE principal_id = ?",
+                (principal_id,),
+            )
+        }
+
+    def _require_grant(self, principal_id, grant_name):
+        if grant_name not in self._grants(principal_id):
+            raise AuthorizationError(
+                f"Principal {principal_id} is not authorized for {grant_name}."
             )
 
     def _insert_file_metadata(self, entity_id, kind, metadata):

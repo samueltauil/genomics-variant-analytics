@@ -32,6 +32,9 @@ class BlobTransport:
         quoted = urllib.parse.quote(path)
         return f"{self._base}/{quoted}{query}"
 
+    def uri(self, path):
+        return self._url(path)
+
     def exists(self, path):
         try:
             self._request("HEAD", self._url(path)).close()

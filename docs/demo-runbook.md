@@ -1,123 +1,181 @@
 # Demo runbook
 
-> **Draft — the demo is not built yet.** This is the shape the runbook will take, derived from the [`platform/demo-enablement`](../openspec/changes/add-genomics-variant-accelerator/specs/platform/demo-enablement/spec.md) spec. Steps carry no durations or commands yet because there is nothing to time or run. Do not attempt a delivery from this document.
+> **Status: partial implementation.** This runbook is executable for the local
+> metadata-only harnesses and preflight/reset checks. Azure provisioning,
+> secondary analysis, governed analytics, and a full delivery remain
+> subscription- or deployment-dependent. Do not present specified-only behavior
+> as demonstrated.
 
-For prerequisites, cost, and coverage, see the [README](../README.md). This document picks up once the environment is yours to provision.
+Read [the claim register](claim-register.md), [the coverage table](coverage.md),
+and the dated, unverified [cost statement](../README.md#cost) before any
+delivery. A phase that does not produce its confirming observation stops at that
+phase; use its diagnostic instead of continuing.
 
-## Before you start
+## Phase 0 — Preflight
 
-- [ ] Read [docs/claim-register.md](claim-register.md). Every delivery depends on it.
-- [ ] Check the [capability coverage table](coverage.md). Anything marked specified only is described, never demonstrated; for a partially demonstrated capability, show only the evidence named there.
-- [ ] Confirm preflight passed against the target subscription and region.
+**Expected duration:** 2–5 minutes locally; live Azure checks depend on CLI
+latency and subscription permissions.
+
+Run from the repository root:
+
+```powershell
+pwsh -NoLogo -NoProfile -NonInteractive -File scripts\Test-DemoPreflight.ps1 |
+  ConvertFrom-Json
+```
+
+For a deterministic local check, pass `-SnapshotPath` to a JSON snapshot with
+`subscription`, `roles`, `quotas`, `regionalAvailability`, and `tooling`
+objects. The deliberately unprepared fixture and the ready fixture are covered
+by `tests\test_demo_preflight.py`; snapshot success is not live Azure evidence.
+
+**Confirming observation:** `Ready: true`, every check is `PASS`, and the
+validated region is named. The deployment entry point runs the same preflight
+before reading the subscription or creating a resource.
+
+**Diagnostic:** inspect every check's `Found` and `Required` values. A live
+`UNVERIFIED` result is not readiness.
 
 ## Phase 1 — Bring-up
 
-Provision the environment. Runs once per environment, not once per delivery.
+**Expected duration:** not locally verified. The existing foundation has a
+previous disposable acceptance record, but the current subscription was not
+re-queried and this repository does not claim a current ready environment.
 
-Each step will state its expected duration and the observation that confirms it worked. If a step finishes without producing its confirming observation, go to that phase's diagnostic — not to the next step.
+With an approved, priced, isolated subscription and a passing live preflight,
+run the single entry point:
 
-**Ready state:** landing zone reachable over SMB, staging pipeline deployed, reference data published, variant store created and empty, environments and approvals configured.
+```powershell
+pwsh -NoLogo -NoProfile -NonInteractive -File scripts\Deploy-Accelerator.ps1 `
+  -SubscriptionId <subscription-id> -Location <region> -EnvironmentName <name>
+```
+
+**Required ready-state observations:** the deployment output records the
+resource group and environment file; the landing share, ADLS taxonomy, private
+connections, and staging identities pass their authorized acceptance checks;
+the variant store is empty before seeding.
+
+**Diagnostic:** stop on any missing observation. Review the preflight JSON, ARM
+deployment output, private-endpoint approvals, and the environment record. Do
+not infer readiness from a successful template submission.
 
 ## Phase 2 — Seeding
 
-Load the synthetic run into the landing zone under a realistic instrument folder convention.
+**Expected duration:** under 30 seconds for the metadata-only local harness;
+cloud transfer duration is unverified.
 
-**Confirming observation:** files visible in the landing zone with run and sample identifiers, sizes, arrival timestamps, and state `complete`.
+```powershell
+python scripts\stage_demo_landing.py `
+  --manifest demo\dataset-manifest.json `
+  --root <local-or-authorized-landing-root> `
+  --inventory <inventory.sqlite3>
+```
 
-## Phase 3 — Presentation
+**Confirming observation:** the report is `verified: true`,
+`paths_preserved: true`, contains 34 synthetic placeholder files, and every
+inventory entry is `complete` with run/sample identifiers, size, arrival time,
+and state. No genomic payload is created by this harness.
 
-Seven steps. Each names the observable output its capability spec requires — show that output, not a slide of it.
+**Diagnostic:** rerun the focused stage test and inspect the first mismatched
+relative path or modified placeholder. For a real share, use the authorized
+landing scanner and do not treat local timings as SMB evidence.
 
-### 1. Ingest
+## Phase 3 — Presentation sequence
 
-A synthetic sequencing run writes to the SMB share.
+The seven steps below name the output required by the capability contract and
+state whether this repository currently produces it. Show only the evidence
+listed as local or previously recorded; the remaining output is a production
+consideration or specified-only behavior.
 
-Show: existing folder convention, sample and run identifiers, file arrival, size and state, and that nothing on the instrument side changed.
-
-**The point:** the laboratory changes nothing.
-
-### 2. Stage
-
-Files move from the file share into object storage.
-
-Show: source, destination, transfer state, integrity result, storage tier, classification, lineage link.
-
-### 3. Process
-
-Launch the pipeline on Batch or HPC.
-
-Show: `FASTQ → QC → alignment → BAM → variant calling → VCF`, plus workflow version, reference genome, compute pool, start and end time, outcome, log location.
-
-**The point:** same workflow definition, two execution targets, with
-variant-level equivalence validated by a documented concordance threshold rather
-than byte-identical files.
-
-### 4. Build the variant store
-
-Parse the VCF into Delta.
-
-Show: variants ingested, reference build, pipeline version, source-file links, rejected records, table maintenance state.
-
-### 5. Query
-
-Notebook or SQL endpoint against the store.
-
-Show: variants in a named gene, variants passing quality filters, variants across cohorts, samples carrying an allele, records from an older pipeline version, variants from a given run.
-
-### 6. Visualize
-
-Show: gene-centric view, variant frequency, cohort comparison, quality-filter funnel, sample-to-file lineage, processing status.
-
-### 7. Govern
-
-Show: who can read raw files, who can query de-identified variants, which source file produced a result, which reference build and pipeline version were used, how a reprocessing event is recorded.
-
-**The point:** every result traces back to a file, a run, and a reference build.
+| Step | Observable output required | Current evidence |
+|---|---|---|
+| 1. Ingest | Unchanged instrument path, run/sample identifiers, file arrival, size, timestamp, and `arriving`/`complete`/`failed` state | **Local:** metadata-only layout and inventory. **Previously recorded:** disposable storage acceptance. Failed-transfer retry is not implemented. |
+| 2. Stage | Source path, destination URI, transfer state, integrity result, storage tier, classification, and landing-to-object lineage | **Local:** staging log and checksum tests. Purview lineage and lifecycle tiering are not implemented. |
+| 3. Process | QC → alignment → BAM/CRAM → variant calling → VCF/GVCF, workflow/reference/compute provenance, timings, outcome, and log | **Specified only:** no Nextflow, Batch/HPC run, or concordance result. |
+| 4. Build variant store | Accepted/rejected counts, reference build, pipeline version, source links, rejected records, and maintenance state | **Local:** SQLite Bronze parser and rejection/provenance tests. It is not a deployed Delta store. |
+| 5. Query | Gene, quality, cross-cohort, allele-in-sample, pipeline-version, and sequencing-run results with traceability | **Specified only:** no notebook, SQL endpoint, or governed query result. |
+| 6. Visualize | Gene-centric, frequency, cohort, quality funnel, sample-to-file lineage, and processing-status views | **Specified only:** no dashboard or rendered view. |
+| 7. Govern | Access-tier decisions, de-identification, source/reference/pipeline traceability, and reprocessing audit | **Local:** policy and hash-chained audit model. Azure identity, service boundary, and full lineage remain unverified. |
 
 ## Phase 4 — Rehearsed failures
 
-Do not improvise these. Each has a defined trigger and an expected response.
+**Expected duration:** 5–10 minutes for local negative tests; live delivery
+timings are unverified.
 
-| Demonstration | Expected response |
-|---|---|
-| Interrupted transfer | File marked `failed`, excluded from staging, retryable without disturbing siblings |
-| Malformed variant record | Rejected with reason and source line; counts reported; other records unaffected |
-| Unauthorized access attempt | Explicit authorization error, not an empty result set |
-
-Failure handling is usually more convincing than the happy path. Budget time for it.
+| Demonstration | Local trigger | Expected response | Evidence status |
+|---|---|---|---|
+| Failed transfer | Not available in the current landing scanner contract | Mark `failed`, exclude from staging, retry without disturbing siblings | **Blocked:** task 2.3 is not implemented; do not improvise this demo. |
+| Rejected variant record | Ingest a synthetic VCF row missing `REF` or `ALT` with `scripts.variant_store.VariantStore` | Retain reason, source URI, line number, accepted/rejected counts; do not write the bad row | **Local and tested.** |
+| Denied access | Use `scripts.governance.GovernancePolicy` without the required synthetic grant | Raise an explicit authorization error and append a denial audit entry; do not return an empty success | **Local and tested.** |
 
 ## Phase 5 — Reset
 
-Return to the Phase 2 starting state without redeploying infrastructure.
+**Expected duration:** under 30 seconds for local SQLite delivery state; cloud
+reset is not implemented.
 
-**Confirming observation:** no variant records, runs, or issues from the prior delivery are visible.
+Reset only the explicitly named local delivery stores, without redeploying
+infrastructure:
 
-If a reset is interrupted, the diagnostic tells you which stores are clean and which are not. Do not start a delivery on a partially reset environment.
+```powershell
+python scripts\reset_demo.py --state-root <local-state-root>
+python scripts\reset_demo.py --state-root <local-state-root> --diagnose
+```
+
+The script removes only known SQLite files directly beneath the supplied state
+root and leaves infrastructure and unrelated files untouched.
+
+**Confirming observation:** the JSON report has `clean: true`,
+`infrastructure_touched: false`, and no rows remain visible in the named
+delivery stores. If reset is interrupted, run `--diagnose`; each store reports
+its existence, table counts, and clean state. Do not begin another delivery
+until every store is clean.
 
 ## Phase 6 — Teardown
 
-Remove everything the demo created.
+**Expected duration:** unverified; Azure deletion and soft-delete retention
+vary by subscription and resource.
 
-**Confirming observation:** no demo-created resource remains in the subscription.
+After a separately authorized live delivery:
 
-Keeping the environment between deliveries is reasonable — but Azure Managed Lustre and provisioned-v2 SSD file shares bill while idle. The cost section of the README will carry the daily rate once it is measured.
+```powershell
+pwsh -NoLogo -NoProfile -NonInteractive -File scripts\Remove-Accelerator.ps1 `
+  -EnvironmentName <name> -SubscriptionId <subscription-id>
+```
+
+The script refuses an untagged resource group and reports soft-deleted
+survivors. **Required live observation:** the named resource group and every
+demo-created resource are absent from the target subscription. This has not
+been re-verified in the current change, so task 11.10 remains unchecked.
+
+If teardown is deferred, the provisioned-v2 SSD share bills for provisioned
+capacity/IOPS/throughput; a running verification VM, retained compute,
+analytics capacity, or Managed Lustre can also accrue idle cost. The amount is
+unverified; use the dated cost statement and a current pricing calculation.
 
 ## Talk track
 
-Two rules:
+Use two explicit labels while presenting:
 
-**Separate demonstrated from asserted.** When you cover behavior the environment does not exercise, say so. "In production you would also..." is honest. Showing a slide and letting it read as running software is not.
+- **Demonstrated here:** local preflight snapshot behavior, synthetic landing
+  layout, staging-log integrity decisions, variant rejection/provenance, local
+  access-denial/audit behavior, and local reset diagnostics.
+- **Production consideration or specified only:** live subscription readiness,
+  Azure provisioning, failed-transfer retry, secondary analysis, deployed Delta
+  and analytics surfaces, Purview lineage, lifecycle transitions, live cost,
+  and teardown cleanliness.
 
-**Stay inside the claim register.** No compliance claim, no released-blueprint claim, no unverified customer attribution, no clinical determination claim for assisted output.
+Say that this is an accelerator and reference architecture built from
+validated patterns. Do not say it is a released Microsoft blueprint, supported
+product, compliance outcome, confirmed customer deployment, clinical decision
+system, diagnosis, or treatment recommendation. AI-assisted analysis is
+exploratory. Review every delivery against [claim-register.md](claim-register.md)
+and [coverage.md](coverage.md).
 
 ## Personas
 
-Tune emphasis to who is in the room.
-
-| Persona | Leads with |
+| Persona | Lead with |
 |---|---|
-| Laboratory operations manager | Instrument compatibility, file arrival, failed transfers, reruns |
-| Bioinformatics engineer | Pipeline portability, reference genomes, scaling, reproducibility |
-| Research scientist | Queryable variants, cohorts, notebooks, cross-study comparison |
-| Clinical genomics team | Provenance, reference versions, quality filters, auditability |
-| Cloud or data architect | Storage tiers, networking, cost, identity, Batch versus HPC |
+| Laboratory operations manager | Instrument compatibility, file arrival, and reruns |
+| Bioinformatics engineer | Workflow portability, reference identity, and reproducibility |
+| Research scientist | Queryable variants and cohort exploration |
+| Clinical genomics team | Provenance, reference versions, quality filters, and auditability |
+| Cloud or data architect | Storage boundaries, networking, identity, cost, and Batch versus HPC |

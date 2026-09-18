@@ -67,11 +67,18 @@ def digest(value):
     return hashlib.sha256(encoded).hexdigest()
 
 
-def validate_submission(request, compatibility, inventory):
-    fields(request, {"run_id", "workflow_id", "workflow_version", "references"}, "Submission")
-    for field in ("run_id", "workflow_id", "workflow_version"):
+def validate_request_compatibility(request, compatibility):
+    fields(
+        request,
+        {"run_id", "workflow_id", "workflow_version", "reference_build",
+         "reference_version", "references"},
+        "Submission",
+    )
+    for field in ("run_id", "workflow_id", "workflow_version", "reference_build",
+                  "reference_version"):
         text(request[field], field)
     requested = reference_set(request["references"])
+    genome = next(reference for reference in request["references"] if reference["type"] == "genome")
     workflows = {}
     for workflow in document(compatibility, "workflows"):
         fields(workflow, {"workflow_id", "workflow_version", "reference_sets"}, "Workflow")
@@ -86,6 +93,17 @@ def validate_submission(request, compatibility, inventory):
         raise ValueError(f"Undeclared workflow version: {workflow_key}.")
     if requested not in workflows[workflow_key]:
         raise ValueError(f"Incompatible reference set for workflow {workflow_key}: {sorted(requested)}.")
+    if (request["reference_build"], request["reference_version"]) != (
+        genome["name"], genome["version"]
+    ):
+        raise ValueError(
+            "Explicit reference_build/reference_version must match the requested genome reference."
+        )
+    return requested
+
+
+def validate_submission(request, compatibility, inventory):
+    requested = validate_request_compatibility(request, compatibility)
     available = {}
     for reference in document(inventory, "references"):
         key = reference_key(reference, artifact=True)

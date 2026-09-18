@@ -143,7 +143,18 @@ class ReferenceZone:
 
     def get_manifest(self, entry):
         """Return a published manifest, or None when the version is absent."""
+        payload = self.get_manifest_bytes(entry)
+        if payload is None:
+            return None
+        return json.loads(payload)
+
+    def get_manifest_bytes(self, entry):
+        """Return the exact stored manifest bytes, or None when the version is absent."""
         path = reference_path(entry)
         if not self._transport.exists(path):
             return None
-        return json.loads(self._transport.get(path))
+        return self._transport.get(path)
+
+    def uri(self, entry, filename=MANIFEST_NAME):
+        """Return the immutable-zone URI for a manifest or artifact."""
+        return self._transport.uri(reference_path(entry, filename))

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "workflows": [
+    {
+      "workflow_id": "genomics-secondary-analysis",
+      "workflow_version": "v0.1.0",
+      "reference_sets": [
+        [
+          {
+            "type": "genome",
+            "name": "GRCh38",
+            "version": "ensembl-116"
+          },
+          {
+            "type": "gene-annotation",
+            "name": "GRCh38",
+            "version": "ensembl-116"
+          },
+          {
+            "type": "transcript-annotation",
+            "name": "GRCh38",
+            "version": "ensembl-116"
+          }
+        ]
+      ]
+    }
+  ]
+}

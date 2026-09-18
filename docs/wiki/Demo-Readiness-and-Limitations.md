@@ -1,6 +1,6 @@
 # Demo Readiness and Limitations
 
-**There is still no runnable end-to-end demo as of 2026-09-11.** Repository guardrails have live acceptance evidence, and ingestion, object-storage layout and the first staging hop are now deployed and measured in a disposable sandbox environment. Processing pipelines, variant tables, notebooks, visualizations, governance tiers and delivery automation remain specified only.
+**There is still no runnable end-to-end demo as of 2026-09-16.** Repository guardrails have live acceptance evidence, and ingestion, object-storage layout and the first staging hop are now deployed and measured in a disposable sandbox environment. Processing pipelines, variant tables, notebooks, visualizations, governance tiers and delivery automation remain specified only.
 
 ## Readiness
 
@@ -15,22 +15,27 @@
 | Scheduled landing inventory and completeness (2.1, 2.2) | 21 local tests pass; the same rule runs over a local directory and the Azure Files share; failure/retry pending |
 | Staging to object storage (3.1, 3.2, 3.3) | Data Factory Copy over private endpoints stages only complete files; a growing file was skipped. Checksums are compared and a corrupted destination is marked failed and withheld; the staging record carries all six required fields. Purview lineage and lifecycle tiering pending |
 | Reference publication and immutability (4.1, 4.2) | Five pinned Ensembl versions published with per-artifact checksum manifests; overwrite rejected by container-level WORM and by the publisher; successor version leaves the prior retrievable |
-| Reference-submission gate (4.3 preparation) | 12 local tests pass; real workflow and published reference inventory integration pending |
+| Reference-submission gate (4.3) | 21 synthetic local tests pass; workflow submission resolves explicit immutable reference versions before allocator invocation; deployed cloud workflow remains outside this task |
 | Metadata lineage, file details, integrity and archival (6.1 through 6.4) | 21 synthetic local tests pass; access grants and actual pipeline/storage integration pending |
 | Nextflow, Batch, and Slurm processing | Specified only |
 | Reference data and Delta store | Specified only |
 | Access tiers, catalog integration, and analytics | Specified only |
-| Preflight, reset, teardown, and cost measurements | Teardown script exists and is tag-guarded; preflight, reset and cost measurement not implemented |
+| Preflight, reset, teardown, and cost measurements | Local snapshot preflight and named-store reset diagnostics are implemented and tested; live quota/region checks, teardown cleanliness, and numeric cost measurement remain unverified |
 
 The development task record is **16/89 completed**, including historical guardrail acceptance, and all **101 local tests pass**.
 
 The deployed environment is disposable and billable. The provisioned share charges on capacity, IOPS and throughput whether or not it is used; the verification client and Data Factory integration runtime charge while running. Deployment has been exercised in exactly one sandbox subscription, so regional availability, quota and policy differences should be expected elsewhere. No cost per delivery or per sample has been measured.
 
-The [demo runbook](https://github.com/samueltauil/genomics-variant-analytics/blob/main/docs/demo-runbook.md) is a draft outline, not executable delivery instructions. Its planned phases are bring-up, seeding, presentation, rehearsed failures, reset, and teardown. Do not attempt a customer delivery from it.
+The [demo runbook](https://github.com/samueltauil/genomics-variant-analytics/blob/main/docs/demo-runbook.md) is executable only for the documented local harnesses and diagnostics. Its cloud bring-up, full presentation, reset, and teardown steps still require separately verified deployment evidence. Do not present specified-only behavior as working software.
 
-## Planned Demo Data
+## Demo Data Manifest
 
-The design proposes Illumina Platinum Genomes via Azure Open Datasets for variant content, with generated subject, sample, and cohort identifiers. Dataset assembly and staging are not verified. Open licensing does not authorize placing genomic files in this Git repository or wiki; retain datasets in the approved external storage location and track manifests separately.
+The repository now includes a metadata-only Illumina Platinum Genomes manifest
+with generated subject, sample, and cohort identifiers. Its validator enforces
+the documented synthetic patterns and rejects patient-identifying fields,
+values, and source donor identifiers. No genomic payload is committed. Remote
+download integrity and landing-zone staging are not verified; retain genomic
+files in approved external storage and keep them out of Git and the wiki.
 
 The hereditary-cancer scenario and query set are proposed demo choices. They are not evidence of a clinical use case or a validated clinical system.
 
