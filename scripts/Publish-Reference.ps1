@@ -102,8 +102,10 @@ from scripts.publish_reference import ReferenceZone
 from scripts.stage_landing import managed_identity_token
 
 catalog = json.load(open("/opt/genomics/reference-sources.json"))
+# None governor: this client run has no durable audit store, so it publishes unaudited by
+# explicit request. Routing it through the governed interface is tracked by task 4.4.
 zone = ReferenceZone(BlobTransport("__ACCOUNT__", "__CONTAINER__",
-                                   managed_identity_token("__CLIENT_ID__")))
+                                   managed_identity_token("__CLIENT_ID__")), None, None)
 selector = "__ONLY__"
 
 for spec in catalog["entries"]:

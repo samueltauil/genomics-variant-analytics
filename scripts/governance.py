@@ -30,6 +30,7 @@ CLASSIFICATIONS = frozenset({
     "synthetic-demo",
 })
 WORKSPACES = frozenset({"research", "clinical"})
+REFERENCE_ROLES = ("reference_publisher", "reference_reader")
 _SYNTHETIC_ID = re.compile(r"SYN-[A-Z0-9][A-Z0-9_-]*$")
 
 
@@ -41,6 +42,26 @@ def synthetic_id(value: Any, name: str = "identifier") -> str:
     if not isinstance(value, str) or _SYNTHETIC_ID.fullmatch(value) is None:
         raise ValueError(f"{name} must match SYN-[A-Z0-9][A-Z0-9_-]*.")
     return value
+
+
+def reference_subject(entry: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Name the reference entry an audit record is about, without inventing a version."""
+    if entry is None:
+        return {"entry": None, "entry_type": None, "entry_name": None, "version": None}
+    if not isinstance(entry, Mapping) or set(entry) != {"type", "name", "version"}:
+        raise ValueError("Reference entry must supply exactly type, name and version.")
+    values = {}
+    for key in ("type", "name", "version"):
+        value = entry[key]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Reference entry {key} must be a non-empty string.")
+        values[key] = value
+    return {
+        "entry": "{type}/{name}/{version}".format(**values),
+        "entry_type": values["type"],
+        "entry_name": values["name"],
+        "version": values["version"],
+    }
 
 
 def _timestamp(value: Any) -> str:
@@ -176,6 +197,15 @@ class GovernancePolicy:
                     PRIMARY KEY (principal_id, workspace)
                 )
             """)
+            self.connection.execute("""
+                CREATE TABLE IF NOT EXISTS governance_reference_grants (
+                    principal_id TEXT NOT NULL,
+                    reference_role TEXT NOT NULL CHECK (reference_role IN (
+                        'reference_publisher', 'reference_reader'
+                    )),
+                    PRIMARY KEY (principal_id, reference_role)
+                )
+            """)
         self.audit = AuditTrail(connection)
 
     def grant_tier(self, principal_id: str, access_tier: str) -> None:
@@ -219,6 +249,45 @@ class GovernancePolicy:
                 "INSERT INTO governance_workspace_grants VALUES (?, ?)",
                 (principal_id, workspace),
             )
+
+    def grant_reference_role(self, principal_id: str, reference_role: str) -> None:
+        synthetic_id(principal_id, "principal_id")
+        if reference_role not in REFERENCE_ROLES:
+            raise ValueError(f"Unsupported reference role: {reference_role}")
+        with self.connection:
+            self.connection.execute(
+                "INSERT INTO governance_reference_grants VALUES (?, ?)",
+                (principal_id, reference_role),
+            )
+
+    def authorize_reference(
+        self,
+        principal_id: str,
+        reference_role: str,
+        operation: str,
+        entry: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Audit a reference publish or read, recording the denial as well as the grant."""
+        synthetic_id(principal_id, "principal_id")
+        if reference_role not in REFERENCE_ROLES:
+            raise ValueError(f"Unsupported reference role: {reference_role}")
+        if not isinstance(operation, str) or not operation.strip():
+            raise ValueError("operation is required.")
+        subject = {"reference_role": reference_role, **reference_subject(entry)}
+        granted = self.connection.execute(
+            """SELECT 1 FROM governance_reference_grants
+               WHERE principal_id = ? AND reference_role = ?""",
+            (principal_id, reference_role),
+        ).fetchone()
+        if granted is None:
+            self.audit.record("reference_data", principal_id, f"deny:{operation}", subject)
+            raise AuthorizationError(
+                f"Principal {principal_id} is not authorized as {reference_role}."
+            )
+        return self.audit.record("reference_data", principal_id, operation, subject)
+
+    def reference_audit_entries(self) -> list[dict[str, Any]]:
+        return [entry for entry in self.audit.entries() if entry["event_type"] == "reference_data"]
 
     def authorize(self, principal_id: str, access_tier: str, operation: str,
                   affected_data: Mapping[str, Any] | None = None) -> None:

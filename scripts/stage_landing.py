@@ -13,7 +13,9 @@ import xml.etree.ElementTree as ElementTree
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
-from scripts.scan_landing import DEFAULT_PATTERN, evaluate_inventory, local_path
+from scripts.scan_landing import (
+    DEFAULT_PATTERN, evaluate_inventory, local_path, read_transfer_manifests,
+)
 
 API_VERSION = "2022-11-02"
 IMDS = "http://169.254.169.254/metadata/identity/oauth2/token"
@@ -65,13 +67,14 @@ def list_share(account, share, token, directory=""):
 
 
 def scan_share(account, share, inventory, client_id, pattern=DEFAULT_PATTERN,
-               completion_marker=None, token=None):
+               completion_marker=None, token=None, transfer_manifest=None, stall_seconds=None):
     inventory = local_path(inventory)
     token = token or managed_identity_token(client_id)
     matcher = re.compile(pattern)
     if not {"run_id", "sample_id"}.issubset(matcher.groupindex):
         raise ValueError("Path pattern requires named run_id and sample_id groups.")
 
+    base = "https://%s.file.core.windows.net/%s" % (account, share)
     observed_at = datetime.now(timezone.utc).isoformat()
     observations = []
     for relative, size, change_time_ns in sorted(list_share(account, share, token)):
@@ -85,9 +88,20 @@ def scan_share(account, share, inventory, client_id, pattern=DEFAULT_PATTERN,
             None if parsed else "unrecognized-path",
         ))
 
+    declarations, manifest_errors = {}, {}
+    if transfer_manifest is not None:
+        def read_manifest(relative):
+            with _send("GET", "%s/%s" % (base, urllib.parse.quote(relative)), token) as response:
+                return response.read()
+
+        declarations, manifest_errors = read_transfer_manifests(
+            read_manifest, transfer_manifest, observations,
+        )
+
     return evaluate_inventory(
-        observations, inventory, "https://%s.file.core.windows.net/%s" % (account, share),
-        pattern, completion_marker, observed_at, mode="azure-files",
+        observations, inventory, base, pattern, completion_marker, observed_at,
+        mode="azure-files", transfer_manifest=transfer_manifest, stall_seconds=stall_seconds,
+        declarations=declarations, manifest_errors=manifest_errors,
     )
 
 
@@ -99,11 +113,14 @@ def main():
     parser.add_argument("--client-id", required=True)
     parser.add_argument("--pattern", default=DEFAULT_PATTERN)
     parser.add_argument("--completion-marker")
+    parser.add_argument("--transfer-manifest")
+    parser.add_argument("--stall-seconds", type=float)
     arguments = parser.parse_args()
 
     report = scan_share(
         arguments.account, arguments.share, arguments.inventory, arguments.client_id,
         arguments.pattern, arguments.completion_marker,
+        transfer_manifest=arguments.transfer_manifest, stall_seconds=arguments.stall_seconds,
     )
     print(json.dumps(report, indent=2))
 

@@ -70,7 +70,7 @@ class WorkflowSubmissionTests(unittest.TestCase):
             }],
         }
         self.transport = MemoryTransport()
-        self.zone = ReferenceZone(self.transport)
+        self.zone = ReferenceZone(self.transport, None, None)
         self.zone.publish(self.genome, [artifact("reference.fa.gz")], "2026-09-15T00:00:00Z")
         self.zone.publish(self.annotation, [artifact("genes.gtf.gz")], "2026-09-15T00:00:00Z")
         self.allocate = Mock(return_value="SYN-ALLOCATION-001")

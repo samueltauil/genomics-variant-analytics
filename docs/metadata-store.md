@@ -200,6 +200,6 @@ this Python API, so protect the database with local filesystem controls and do
 not expose trusted lineage methods to analysts. Graph reachability does not
 establish transfer integrity, validate FASTQ, or provide biological evidence.
 
-Task 2.3 remains blocked on a trusted transfer-failure contract. The metadata
-store does not change scanner completeness or authorize staging. Azure
-readiness is explicitly `not-evaluated` in every trace response.
+The metadata store does not change scanner completeness, transfer-failure
+classification, or authorize staging. Azure readiness is explicitly
+`not-evaluated` in every trace response.

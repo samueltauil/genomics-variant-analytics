@@ -88,7 +88,7 @@ consideration or specified-only behavior.
 
 | Step | Observable output required | Current evidence |
 |---|---|---|
-| 1. Ingest | Unchanged instrument path, run/sample identifiers, file arrival, size, timestamp, and `arriving`/`complete`/`failed` state | **Local:** metadata-only layout and inventory. **Previously recorded:** disposable storage acceptance. Failed-transfer retry is not implemented. |
+| 1. Ingest | Unchanged instrument path, run/sample identifiers, file arrival, size, timestamp, and `arriving`/`complete`/`failed` state | **Local:** metadata-only layout, inventory, and manifest-declared failure and retry. **Previously recorded:** disposable storage acceptance. No instrument or SMB transfer was exercised. |
 | 2. Stage | Source path, destination URI, transfer state, integrity result, storage tier, classification, and landing-to-object lineage | **Local:** staging log and checksum tests. Purview lineage and lifecycle tiering are not implemented. |
 | 3. Process | QC → alignment → BAM/CRAM → variant calling → VCF/GVCF, workflow/reference/compute provenance, timings, outcome, and log | **Specified only:** no Nextflow, Batch/HPC run, or concordance result. |
 | 4. Build variant store | Accepted/rejected counts, reference build, pipeline version, source links, rejected records, and maintenance state | **Local:** SQLite Bronze parser and rejection/provenance tests. It is not a deployed Delta store. |
@@ -103,7 +103,7 @@ timings are unverified.
 
 | Demonstration | Local trigger | Expected response | Evidence status |
 |---|---|---|---|
-| Failed transfer | Not available in the current landing scanner contract | Mark `failed`, exclude from staging, retry without disturbing siblings | **Blocked:** task 2.3 is not implemented; do not improvise this demo. |
+| Failed transfer | Write a synthetic run file shorter than the size its `{run_id}/transfer-manifest.json` declares, then run `scripts/scan_landing.py --transfer-manifest '{run_id}/transfer-manifest.json' --stall-seconds 5` twice | Mark `failed` with `incomplete-transfer`, withhold it from `available_for_staging`, and on re-send to the declared size return the same record to `arriving` then `complete` without disturbing siblings | **Local and tested.** Failure is declared against the manifest, not inferred from a stalled copy; see [failure detection and retry](landing-inventory.md#failure-detection-and-retry). |
 | Rejected variant record | Ingest a synthetic VCF row missing `REF` or `ALT` with `scripts.variant_store.VariantStore` | Retain reason, source URI, line number, accepted/rejected counts; do not write the bad row | **Local and tested.** |
 | Denied access | Use `scripts.governance.GovernancePolicy` without the required synthetic grant | Raise an explicit authorization error and append a denial audit entry; do not return an empty success | **Local and tested.** |
 
@@ -156,10 +156,12 @@ unverified; use the dated cost statement and a current pricing calculation.
 Use two explicit labels while presenting:
 
 - **Demonstrated here:** local preflight snapshot behavior, synthetic landing
-  layout, staging-log integrity decisions, variant rejection/provenance, local
-  access-denial/audit behavior, and local reset diagnostics.
+  layout, manifest-declared transfer failure and retry, staging-log integrity
+  decisions, variant rejection/provenance, local access-denial/audit behavior,
+  and local reset diagnostics.
 - **Production consideration or specified only:** live subscription readiness,
-  Azure provisioning, failed-transfer retry, secondary analysis, deployed Delta
+  Azure provisioning, interrupted transfers observed over SMB or from an
+  instrument, secondary analysis, deployed Delta
   and analytics surfaces, Purview lineage, lifecycle transitions, live cost,
   and teardown cleanliness.
 
