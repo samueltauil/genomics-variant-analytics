@@ -119,12 +119,26 @@ $expiresOn = (Get-Date).AddDays($ExpiresInDays).ToString('yyyy-MM-dd')
 $deploymentName = "genomics-$EnvironmentName-$(Get-Date -Format 'yyyyMMddHHmmss')"
 
 New-Item -ItemType Directory -Force -Path (Join-Path $repositoryRoot '.azure') | Out-Null
-if (-not (Test-Path -LiteralPath $keyPath)) {
-    # Linux provisioning requires a key even though verification runs through run-command.
-    & ssh-keygen -t ed25519 -N '""' -C "genomics-$EnvironmentName" -f $keyPath -q
-    if ($LASTEXITCODE -ne 0) { throw 'Could not generate the client provisioning key.' }
+
+# Azure rejects a public-key change on an existing VM, so a re-run must present the key the VM
+# already carries. Generating one here would otherwise break idempotency whenever the untracked
+# local key is absent.
+$existingGroupName = "rg-genomics-$EnvironmentName"
+$adminPublicKey = & az vm show --resource-group $existingGroupName --name "vm-genomics-$EnvironmentName" `
+    --subscription $SubscriptionId `
+    --query 'osProfile.linuxConfiguration.ssh.publicKeys[0].keyData' -o tsv 2>$null
+if ($LASTEXITCODE -ne 0) { $adminPublicKey = $null }
+if ($adminPublicKey) {
+    Write-Host 'Reusing the provisioning key already recorded on the verification client.'
 }
-$adminPublicKey = (Get-Content -LiteralPath "$keyPath.pub" -Raw).Trim()
+else {
+    if (-not (Test-Path -LiteralPath $keyPath)) {
+        # Linux provisioning requires a key even though verification runs through run-command.
+        & ssh-keygen -t ed25519 -N '""' -C "genomics-$EnvironmentName" -f $keyPath -q
+        if ($LASTEXITCODE -ne 0) { throw 'Could not generate the client provisioning key.' }
+    }
+    $adminPublicKey = (Get-Content -LiteralPath "$keyPath.pub" -Raw).Trim()
+}
 
 Write-Host "Subscription : $($account.name)"
 Write-Host "Region       : $Location"
@@ -153,6 +167,28 @@ if (-not $PSCmdlet.ShouldProcess("subscription $($account.name)", "deploy $deplo
     return
 }
 
+# Report the pending change set before deploying, so a re-run against a complete environment can
+# state that nothing changes rather than leaving the operator to infer it from a silent success.
+$pending = Invoke-Az (
+    @('deployment', 'sub', 'what-if', '--no-pretty-print', '-o', 'json') + $common
+) 'What-if analysis failed' | ConvertFrom-Json
+$changeCounts = @{}
+foreach ($change in $pending.changes) {
+    $changeCounts[$change.changeType] = 1 + ($changeCounts[$change.changeType] ?? 0)
+}
+$changed = @($pending.changes | Where-Object changeType -notin @('NoChange', 'Ignore'))
+$changeSummary = (
+    $changeCounts.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }
+) -join ', '
+if ($changed.Count -eq 0) {
+    Write-Host "Pending changes: none ($changeSummary). The environment is already complete."
+}
+else {
+    Write-Host "Pending changes: $($changed.Count) ($changeSummary)."
+    $changed | ForEach-Object { Write-Host "  $($_.changeType) $($_.resourceId)" }
+}
+
+$deploymentStarted = Get-Date
 $result = Invoke-Az (
     @('deployment', 'sub', 'create', '--name', $deploymentName, '-o', 'json') + $common
 ) 'Deployment failed' | ConvertFrom-Json
@@ -269,5 +305,7 @@ $environment = [ordered]@{
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $environmentFile) | Out-Null
 $environment | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $environmentFile -Encoding utf8
 
+$elapsed = (Get-Date) - $deploymentStarted
+Write-Host ("Deployed in {0:mm\:ss} (provisioning plus in-network taxonomy creation)." -f $elapsed)
 Write-Host "Deployed. Environment recorded in $environmentFile (untracked)."
 Write-Host "Tear down with: ./scripts/Remove-Accelerator.ps1 -EnvironmentName $EnvironmentName"

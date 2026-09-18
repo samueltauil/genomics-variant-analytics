@@ -98,6 +98,19 @@ function Compare-Version {
     return ([version]"$($Matches.major).$($Matches.minor)") -ge $Required
 }
 
+function Get-PropertyPath {
+    # Strict mode turns a missing property into a terminating error, so walk the path defensively.
+    param([Parameter(Mandatory)] $InputObject, [Parameter(Mandatory)][string[]] $Path)
+    $current = $InputObject
+    foreach ($name in $Path) {
+        if ($null -eq $current -or $current.PSObject.Properties.Name -notcontains $name) {
+            return $null
+        }
+        $current = $current.$name
+    }
+    return $current
+}
+
 function Add-ToolCheck {
     param(
         [Parameter(Mandatory)][string] $Name,
@@ -198,13 +211,37 @@ elseif ($RequireAzureChecks) {
         try {
             $account = Invoke-AzJson @('account', 'show', '--subscription', $SubscriptionId, '-o', 'json')
             Add-Check 'subscription' 'PASS' "$($account.id) ($($account.name))" $SubscriptionId
-            $subscriptionType = $account.subscriptionPolicies.quotaId
-            Add-Check 'subscription-type' `
-                $(if ($account.state -eq 'Enabled' -and $subscriptionType) { 'PASS' } else { 'FAIL' }) `
-                "$subscriptionType ($($account.state))" 'enabled Azure subscription with supported billing agreement'
         }
         catch {
             Add-Check 'subscription' 'FAIL' $_.Exception.Message 'subscription is readable'
+            $account = $null
+        }
+
+        # quotaId names the billing agreement, and `az account show` omits it. Read it straight
+        # from ARM: `az account subscription show` needs a preview extension that cannot be
+        # installed non-interactively. Not every principal can read it, so absence is unverified.
+        $subscriptionType = $null
+        try {
+            $details = Invoke-AzJson @(
+                'rest', '--method', 'get', '--url',
+                "https://management.azure.com/subscriptions/$($SubscriptionId)?api-version=2022-12-01"
+            )
+            $subscriptionType = Get-PropertyPath $details @('subscriptionPolicies', 'quotaId')
+        }
+        catch {
+            $subscriptionType = $null
+        }
+        $subscriptionState = if ($account) { $account.state } else { 'unknown' }
+        if (-not $subscriptionType) {
+            Add-Check 'subscription-type' 'UNVERIFIED' `
+                "billing agreement not exposed to this principal ($subscriptionState)" `
+                'enabled Azure subscription with supported billing agreement'
+        }
+        else {
+            Add-Check 'subscription-type' `
+                $(if ($subscriptionState -eq 'Enabled') { 'PASS' } else { 'FAIL' }) `
+                "$subscriptionType ($subscriptionState)" `
+                'enabled Azure subscription with supported billing agreement'
         }
 
         try {
@@ -232,9 +269,12 @@ elseif ($RequireAzureChecks) {
         }
         else {
             try {
+                # --all is mutually exclusive with --scope; scope alone already includes
+                # assignments inherited from the subscription's management groups.
                 $assignments = Invoke-AzJson @(
                     'role', 'assignment', 'list', '--assignee', $DeployerObjectId,
-                    '--scope', "/subscriptions/$SubscriptionId", '--all', '-o', 'json'
+                    '--scope', "/subscriptions/$SubscriptionId",
+                    '--include-inherited', '--subscription', $SubscriptionId, '-o', 'json'
                 )
                 $roleNames = @($assignments | Select-Object -ExpandProperty roleDefinitionName -Unique)
                 $hasDeploymentRole = @('Owner', 'Contributor') | Where-Object { $_ -in $roleNames }

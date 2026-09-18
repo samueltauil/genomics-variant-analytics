@@ -15,7 +15,7 @@ param ingestionPrincipalId string
 param deployerPrincipalId string
 
 @description('Private endpoints replace this in task 8.7; until then the share is reachable for acceptance testing.')
-param allowPublicNetworkAccess bool = true
+param allowPublicNetworkAccess bool = false
 
 var smbManagedIdentityAdminRoleId = 'a235d3ee-5935-4cfb-8cc5-a3303ad5995e'
 var smbPrivilegedContributorRoleId = '69566ab7-960f-475b-8e7c-b3118f30c6bd'
