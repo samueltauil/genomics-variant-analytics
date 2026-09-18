@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 
 from scripts.scan_landing import local_path
 from scripts.validate_submission import fields, text
+from scripts.governance import CLASSIFICATIONS
 
 APPLICATION_ID = 0x47535447
 SCHEMA_VERSION = 1
@@ -19,10 +20,7 @@ STATES = frozenset({"staged", "failed"})
 INTEGRITY_RESULTS = frozenset({"verified", "mismatch", "not-checked"})
 STORAGE_TIERS = frozenset({"Hot", "Cool", "Cold", "Archive"})
 
-# Declared handling labels, not inferred sensitivity. Task 8.5 owns classification policy.
-CLASSIFICATIONS = frozenset({
-    "genomic-primary", "genomic-secondary", "genomic-variant", "reference", "synthetic-demo",
-})
+# Declared handling labels, not inferred sensitivity.
 
 RECORD_FIELDS = frozenset({
     "source_path", "run_id", "sample_id", "destination_uri",

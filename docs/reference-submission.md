@@ -1,13 +1,13 @@
-# Local Reference Submission Gate
+# Reference Submission Gate
 
 [scripts/validate_submission.py](../scripts/validate_submission.py) prepares task
-4.3 with an executor-independent compatibility gate. It uses Python 3.10+ and
-the standard library. No reference downloads, cloud authentication, network
-requests or compute allocation occur in the CLI.
-
-Task 4.3 remains pending until the actual workflow submission path uses this
-gate with a trusted published reference inventory. Synthetic allocator tests
-verify call ordering, not a deployed executor or reference zone.
+4.3 with an executor-independent compatibility gate. The
+[workflow submission path](../scripts/workflow_submission.py) applies the same
+compatibility check to a write-once `ReferenceZone`, resolves the exact
+published manifests, and invokes the allocator only after validation. It uses
+Python 3.10+ and the standard library. No reference downloads, cloud
+authentication, network requests or compute allocation occur in the local
+tests.
 
 ## Contract
 
@@ -23,6 +23,8 @@ Submission request:
   "run_id": "SYN-RUN-001",
   "workflow_id": "synthetic-workflow",
   "workflow_version": "v1",
+  "reference_build": "GRCh38",
+  "reference_version": "synthetic-v1",
   "references": [
     {"type": "genome", "name": "GRCh38", "version": "synthetic-v1"}
   ]
@@ -88,10 +90,14 @@ potentially sensitive metadata and use synthetic identifiers only.
 
 ## Executor Integration
 
-The `submit_run(request, compatibility, inventory, allocate)` Python API validates
-first, then calls `allocate(validated)` exactly once only for an accepted pairing.
-The pinned result contains the run/workflow identifiers, exact reference
-URIs/versions/checksums and both manifest digests. Digests use SHA-256 of canonical
+The `submit_workflow(request, compatibility, reference_zone, allocate)` Python
+API validates the explicit build and version, checks compatibility, resolves the
+exact published manifests, and calls `allocate(prepared)` exactly once only for
+an accepted pairing. The pinned result contains the run/workflow identifiers,
+the exact reference build/version, immutable manifest URIs and per-manifest
+SHA-256 digests, plus the compatibility-manifest digest. The
+`submit_run(request, compatibility, inventory, allocate)` API provides the same
+ordering for a trusted inventory document. Digests use SHA-256 of canonical
 JSON (sorted object keys, compact separators, ASCII escaping); they are not hashes
 of the original document bytes or signatures. Changing array order changes a
 manifest digest even though reference-set matching is order independent.
@@ -103,7 +109,8 @@ Attestation checks, permissions and budget/preflight gates remain separate
 requirements. A caller can bypass this Python function; it is not an authorization
 boundary or an installed cloud admission controller.
 
-Twelve synthetic tests cover incompatible build/annotation rejection before the
-allocator, missing versions without fallback, exact matching, duplicate/schema
-validation, credential-free artifact metadata, detached pinned output and CLI
-validation. No genomic payloads or real reference builds are test fixtures.
+Synthetic tests cover incompatible build/annotation rejection before the
+allocator, missing explicit build/version without fallback, exact matching,
+duplicate/schema validation, credential-free artifact metadata, detached pinned
+output and CLI validation. No genomic payloads or real reference builds are test
+fixtures.

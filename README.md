@@ -78,40 +78,53 @@ Current coverage totals are **0 Demonstrated**, **7 Partially demonstrated**, an
 | Partially demonstrated | Show only the evidenced part; describe the rest as intent |
 | **Specified only** | Describe as architectural intent. Do not imply working software. |
 
-See the [capability coverage table](docs/coverage.md) for all ten statuses, evidence, limitations, and presenter guidance. Historical cloud acceptance is evidence only for the checks recorded in the repository; it is not proof of a currently deployed environment. Local evidence includes the [landing inventory](docs/landing-inventory.md), [metadata model](docs/metadata-store.md), staging log, reference publisher, data-hygiene tests, and [reference submission gate](docs/reference-submission.md). The submission gate prepares task 4.3 but is not integrated with a workflow, so that task remains unchecked.
+See the [capability coverage table](docs/coverage.md) for all ten statuses, evidence, limitations, and presenter guidance. Historical cloud acceptance is evidence only for the checks recorded in the repository; it is not proof of a currently deployed environment. Local evidence includes the [landing inventory](docs/landing-inventory.md), [metadata model](docs/metadata-store.md), staging log, reference publisher, data-hygiene tests, and [reference submission gate](docs/reference-submission.md). The task 4.3 gate is a local workflow-submission integration with a synthetic allocator and published-reference abstraction; it is not a deployed cloud pipeline.
 
 ## Prerequisites
 
-For local validation, use PowerShell 7.2+, Python 3.10+ and Git; no Azure account
-or CLI is needed. See the [local commands](infra/README.md#run-locally).
+For local validation, use PowerShell 7.2+, Python 3.10+ and Git; no Azure
+account is needed. The machine-checkable preflight also accepts a local JSON
+subscription snapshot so its failure reporting can be tested without contacting
+Azure. See the [local commands](infra/README.md#run-locally) and
+`scripts\Test-DemoPreflight.ps1`.
 The [local write smoke test](infra/README.md#local-write-smoke-test) verifies
 synthetic write integrity and cleanup without using Azure or SMB.
 
-A future cloud preflight check will verify the following. It is not implemented,
-so the existing deployment script is not a turnkey or currently authorized
-delivery entry point; treat this list as planning input.
+The preflight checks the following. Snapshot mode is locally verifiable; live
+Azure values remain subscription-dependent and must be checked immediately
+before a billable deployment. `Deploy-Accelerator.ps1` refuses to perform any
+resource lookup or deployment when the required Azure preflight fails.
 
 - An Azure subscription you can create resources in, with the roles needed to assign RBAC and create federated credentials
 - Quota for the Batch or HPC pool sizing you intend to run
 - A region offering every component in the architecture above
-- Azure CLI, Git, and a Delta-capable engine (Microsoft Fabric or Azure Databricks)
+- Azure CLI, Bicep, Git, PowerShell, Python, and a Delta-capable engine (Microsoft Fabric or Azure Databricks)
 - A GitHub account for forking
 
 ## Cost
 
-This reconciliation did not query Azure, so current resources and charges are
-unknown. The tracked disposable acceptance deployment does not provide a current
-cost estimate or authorization for another billable run. Before any new billable
-action, produce a dated, region-specific estimate based on approved sizing and an
-explicit spending limit.
+**Estimate status (dated September 16, 2026; `eastus2`): unverified.** No Azure
+pricing lookup or live billing observation was performed in this change, so the
+numeric per-delivery cost and idle daily cost are intentionally **not stated**.
+Do not substitute a remembered price or present the values below as a quote.
 
-Not yet estimated. Once provisioning exists, this section will state per-delivery cost, idle cost, the resources that dominate each, and the date and region the estimate was produced for.
+| Figure | Value | Sizing basis and dominant resources |
+|---|---|---|
+| One delivery | Unverified; calculate before provisioning | The configured SSD provisioned-v2 share is 128 GiB, 3,000 IOPS and 200 MiB/s; the verification client is `Standard_D4s_v7`; optional Batch/HPC and analytics capacity are not sized here. |
+| Idle per day | Unverified; calculate before provisioning | The provisioned-v2 share continues to bill for provisioned capacity/IOPS/throughput; a running verification VM and any retained compute, analytics, or Managed Lustre capacity add idle cost. |
 
-Until then: Azure Managed Lustre and provisioned-v2 SSD file shares are the two line items that will dominate, and both bill while idle.
+The estimate must be regenerated for the chosen subscription, region, SKU,
+runtime, retention window, and delivery duration, then recorded with the
+pricing date and source. The repository contains no live pricing evidence.
 
 ## Data
 
-Demo data must be **synthetic or openly licensed**. The planned dataset uses Illumina Platinum Genomes with generated subject, sample, and cohort identifiers, but dataset assembly and landing-zone seeding remain pending. No real patient-identifiable data is used, and none should be added.
+Demo data must be **synthetic or authorized public sample data**. The
+[metadata-only demo manifest](docs/demo-dataset.md) references the Illumina
+Platinum Genomes `2017-1.0` collection in Azure Open Datasets and binds it only
+to generated subject, sample, and cohort identifiers. The manifest contains no
+genomic payload or real patient-identifiable metadata; landing-zone seeding
+remains pending.
 
 The repository itself must never hold genomic data. The data-hygiene workflow rejects genomic file extensions and Git blobs over 1 MiB. It is a required merge gate on `main`; forks must repeat the [administrator setup and acceptance checks](CONTRIBUTING.md#administrator-setup-and-acceptance). This does not prevent publication to unprotected branches or forks.
 

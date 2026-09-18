@@ -34,7 +34,10 @@ param(
 
     [Parameter(HelpMessage = 'Object id of the deploying principal. Supply this when Microsoft Graph is unavailable, as it often is for CI identities.')]
     [ValidatePattern('^[0-9a-fA-F-]{36}$')]
-    [string] $DeployerObjectId
+    [string] $DeployerObjectId,
+
+    [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
+    [string] $PreflightSnapshotPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -44,6 +47,32 @@ $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $templatePath = Join-Path $repositoryRoot 'infra/main.bicep'
 $environmentFile = Join-Path $repositoryRoot '.azure/environment.env.json'
 $keyPath = Join-Path $repositoryRoot '.azure/client.local.key'
+$preflightPath = Join-Path $repositoryRoot 'scripts/Test-DemoPreflight.ps1'
+
+Write-Host 'Running Azure preflight before any resource lookup or deployment.'
+$preflightArgs = @(
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-File', $preflightPath,
+    '-EnvironmentName', $EnvironmentName,
+    '-Location', $Location,
+    '-ShareQuotaGiB', $ShareQuotaGiB,
+    '-ShareIops', $ShareIops,
+    '-ShareBandwidthMibps', $ShareBandwidthMibps,
+    '-RequireAzureChecks'
+)
+if ($SubscriptionId) {
+    $preflightArgs += @('-SubscriptionId', $SubscriptionId)
+}
+if ($DeployerObjectId) {
+    $preflightArgs += @('-DeployerObjectId', $DeployerObjectId)
+}
+if ($PreflightSnapshotPath) {
+    $preflightArgs += @('-SnapshotPath', $PreflightSnapshotPath)
+}
+$preflight = & pwsh @preflightArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Preflight failed; provisioning was not started.`n$($preflight -join [Environment]::NewLine)"
+}
+$preflight | Write-Host
 
 # Top-level taxonomy from healthcare data solutions, with the genomics modality beneath it.
 $taxonomy = @(

@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.metadata_store import FILE_STAGES, MetadataStore
+from scripts.metadata_store import AuthorizationError, FILE_STAGES, MetadataStore
 
 
 class MetadataStoreTests(unittest.TestCase):
@@ -331,6 +331,105 @@ class MetadataStoreTests(unittest.TestCase):
         for database in ("relative.sqlite3", r"\\synthetic.invalid\share\metadata.sqlite3"):
             with self.subTest(database=database), self.assertRaises(ValueError):
                 MetadataStore(database)
+
+    def test_research_only_grant_returns_research_without_clinical_or_subject_linkage(self):
+        self.seed_chain()
+        self.store.set_research_metadata("SYN-SAMPLE-001", {
+            "cohort_id": "SYN-COHORT-001",
+            "study_arm": "synthetic-case",
+        })
+        self.store.set_clinical_metadata("SYN-SAMPLE-001", {
+            "clinical_status": "synthetic-observed",
+            "phenotype_code": "SYN-PHENOTYPE-001",
+        })
+        self.store.grant_access("SYN-PRINCIPAL-RESEARCH", "research_metadata")
+
+        result = self.store.read_sample_metadata(
+            "SYN-PRINCIPAL-RESEARCH", "SYN-SAMPLE-001"
+        )
+
+        self.assertEqual(result, {
+            "sample_id": "SYN-SAMPLE-001",
+            "research": {
+                "cohort_id": "SYN-COHORT-001",
+                "study_arm": "synthetic-case",
+            },
+        })
+        self.assertNotIn("clinical", result)
+        self.assertNotIn("subject_id", result)
+        with self.assertRaisesRegex(AuthorizationError, "clinical_metadata"):
+            self.store.read_clinical_metadata(
+                "SYN-PRINCIPAL-RESEARCH", "SYN-SAMPLE-001"
+            )
+        with self.assertRaisesRegex(AuthorizationError, "subject_linkage"):
+            self.store.resolve_subject("SYN-PRINCIPAL-RESEARCH", "SYN-SAMPLE-001")
+
+    def test_metadata_domains_and_grants_persist_separately(self):
+        self.seed_chain()
+        research = {"assay_type": "synthetic-wgs", "study_id": "SYN-STUDY-001"}
+        clinical = {"diagnosis_code": "SYN-DIAGNOSIS-001"}
+        self.store.set_research_metadata("SYN-SAMPLE-001", research)
+        self.store.set_clinical_metadata("SYN-SAMPLE-001", clinical)
+        for grant in ("clinical_metadata", "subject_linkage"):
+            self.store.grant_access("SYN-PRINCIPAL-CLINICAL", grant)
+        self.store.close()
+
+        with MetadataStore(self.database) as reopened:
+            self.assertEqual(
+                reopened.read_sample_metadata(
+                    "SYN-PRINCIPAL-CLINICAL", "SYN-SAMPLE-001"
+                ),
+                {"sample_id": "SYN-SAMPLE-001", "clinical": clinical},
+            )
+            self.assertEqual(
+                reopened.resolve_subject(
+                    "SYN-PRINCIPAL-CLINICAL", "SYN-SAMPLE-001"
+                ),
+                "SYN-SUBJECT-001",
+            )
+            tables = {
+                row[0] for row in reopened._connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            self.assertTrue({
+                "research_metadata", "clinical_metadata", "access_grants"
+            }.issubset(tables))
+
+    def test_unauthorized_metadata_operations_raise_explicit_errors(self):
+        self.seed_chain()
+        self.store.set_research_metadata(
+            "SYN-SAMPLE-001", {"cohort_id": "SYN-COHORT-001"}
+        )
+        for operation in (
+            lambda: self.store.read_sample_metadata(
+                "SYN-PRINCIPAL-NONE", "SYN-SAMPLE-001"
+            ),
+            lambda: self.store.read_research_metadata(
+                "SYN-PRINCIPAL-NONE", "SYN-SAMPLE-001"
+            ),
+            lambda: self.store.resolve_subject(
+                "SYN-PRINCIPAL-NONE", "SYN-SAMPLE-001"
+            ),
+        ):
+            with self.subTest(operation=operation), self.assertRaises(AuthorizationError):
+                operation()
+
+    def test_metadata_rejects_non_samples_unapproved_fields_and_invalid_grants(self):
+        self.seed_chain()
+        cases = [
+            ("SYN-SUBJECT-001", {"cohort_id": "SYN-COHORT-001"}),
+            ("SYN-MISSING", {"cohort_id": "SYN-COHORT-001"}),
+            ("SYN-SAMPLE-001", {"patient_name": "Synthetic Person"}),
+            ("SYN-SAMPLE-001", {"cohort_id": ["SYN-COHORT-001"]}),
+        ]
+        for sample_id, attributes in cases:
+            with self.subTest(sample_id=sample_id, attributes=attributes), self.assertRaises(ValueError):
+                self.store.set_research_metadata(sample_id, attributes)
+        with self.assertRaises(ValueError):
+            self.store.grant_access("SYN-PRINCIPAL-001", "all_metadata")
+        with self.assertRaises(ValueError):
+            self.store.revoke_access("SYN-PRINCIPAL-001", "research_metadata")
 
 
 if __name__ == "__main__":

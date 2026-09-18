@@ -1,8 +1,9 @@
 # Local Genomic Metadata Store
 
-The local SQLite model implements tasks 6.1 through 6.4: bidirectional lineage,
-file metadata, referential integrity and archival. It is a trusted, single-machine development API,
-not a deployed service, governed query endpoint or Delta variant store.
+The local SQLite model implements tasks 6.1 through 6.5: bidirectional lineage,
+file metadata, referential integrity, archival, and persisted metadata-domain grants.
+It is a trusted, single-machine development API, not a deployed service,
+governed query endpoint or Delta variant store.
 No Azure account, network connection or genomic payload is needed.
 
 ## Model
@@ -41,6 +42,42 @@ include the requested root, deduplicate shared nodes, return deterministically
 sorted entities and links, and read one consistent database snapshot. Unknown
 or incorrectly typed roots raise `ValueError`. A disconnected subject is not
 included, nor is a sibling variant when tracing upward from another variant.
+These lineage methods are trusted operator APIs and expose subject linkage.
+They are not principal-facing de-identified query methods.
+
+## Metadata Domains And Grants
+
+Research and clinical sample metadata are persisted in separate
+`research_metadata` and `clinical_metadata` tables. The accepted fields are
+intentionally narrow and synthetic:
+
+| Domain | Accepted fields |
+| --- | --- |
+| Research | `assay_type`, `cohort_id`, `study_arm`, `study_id` |
+| Clinical | `clinical_status`, `diagnosis_code`, `phenotype_code` |
+
+Values must be scalar JSON values or null. Metadata is accepted only for an
+existing synthetic sample. Direct identifiers and arbitrary attributes are not
+accepted, so examples cannot add names, medical-record numbers, birth dates,
+contact details, or other PHI-bearing fields.
+
+`grant_access(principal_id, grant_name)` persists one explicit grant. Supported
+grants are `research_metadata`, `clinical_metadata`, and `subject_linkage`;
+principal identifiers must also use the `SYN-...` convention. Duplicate grants
+are rejected by the database. `revoke_access` explicitly rejects a grant that
+does not exist.
+
+`read_sample_metadata(principal_id, sample_id)` returns only the domains granted
+to that principal. A research-only principal receives `sample_id` and the
+`research` object, with no `clinical` key and no subject identifier. A principal
+with no metadata-domain grant receives `AuthorizationError`, rather than an
+empty or partial success. The domain-specific read methods also raise
+`AuthorizationError` when their exact grant is absent.
+
+Subject linkage is never included in metadata projections. It is available only
+through the separate `resolve_subject` operation and requires the independent
+`subject_linkage` grant. This makes de-identified metadata access sample-scoped
+even if the lineage graph contains a subject parent.
 
 ## File Details And Archival
 
@@ -73,8 +110,9 @@ ancestors still resolve. This is metadata archival, not file deletion, blob
 tiering, retention enforcement or access revocation. Legacy artifacts require
 file-detail backfill before archival. There is no unarchive operation.
 
-Opening a schema-version-1 database upgrades it transactionally to version 2
-without fabricating missing file details. Its lineage remains readable.
+Opening a schema-version-1 or version-2 database upgrades it transactionally to
+version 3 without fabricating missing file details or metadata grants. Its
+lineage remains readable.
 `get_artifact` rejects a legacy file until `backfill_file_metadata(entity_id,
 metadata)` supplies validated details, once only. Register its pipeline producer
 first when applicable. New file entries cannot omit details. Back up existing
@@ -114,6 +152,20 @@ with tempfile.TemporaryDirectory() as directory:
                 "integrity_result": "not-checked",
             })
         store.add_entity("SYN-VARIANT-001", "variant", ["SYN-VCF-001"])
+        store.set_research_metadata("SYN-SAMPLE-001", {
+            "cohort_id": "SYN-COHORT-001",
+            "study_arm": "synthetic-case",
+        })
+        store.set_clinical_metadata("SYN-SAMPLE-001", {
+            "clinical_status": "synthetic-observed",
+        })
+        store.grant_access("SYN-PRINCIPAL-RESEARCH", "research_metadata")
+        projection = store.read_sample_metadata(
+            "SYN-PRINCIPAL-RESEARCH", "SYN-SAMPLE-001"
+        )
+        assert "research" in projection
+        assert "clinical" not in projection
+        assert "subject_id" not in projection
         assert len(store.trace_subject("SYN-SUBJECT-001")["entities"]) == 7
         assert len(store.trace_variant("SYN-VARIANT-001")["links"]) == 6
         store.archive_artifact("SYN-VCF-001")
@@ -130,19 +182,22 @@ store connection per thread. This module is a Python API, not a CLI.
 python -m unittest discover -s tests -p test_metadata_store.py -v
 ```
 
-Twenty-one tests cover full-chain traversal in both directions, BAM/CRAM and
+Twenty-five tests cover full-chain traversal in both directions, BAM/CRAM and
 VCF/GVCF alternatives, shared ancestors, multiplexed runs, unrelated branches,
 atomic rejection of a missing sample, stage and identifier validation, database
 foreign keys, persistence, path guards and snapshot consistency during a write.
 They also cover complete file-detail retrieval, invalid metadata rollback,
 producer typing, legacy backfill, archival, and concurrent archive/read behavior.
+Focused access tests verify separate persisted metadata tables and grants,
+research-only projection without clinical attributes or subject linkage,
+explicit authorization errors, and rejection of unapproved metadata fields.
 Fixtures are synthetic metadata generated in temporary directories, not the
 future Platinum Genomes demo dataset or actual pipeline outputs.
 
-Clinical/research grants (6.5), subject-linkage authorization,
-audit and Delta/Purview integration remain pending. This API returns subject
-linkage and must not be exposed to analysts. Protect the database and any
-printed reports with local filesystem controls. Graph reachability does not
+Audit, service authentication, a deployed server-side authorization boundary,
+and Delta/Purview integration remain pending. Direct database access can bypass
+this Python API, so protect the database with local filesystem controls and do
+not expose trusted lineage methods to analysts. Graph reachability does not
 establish transfer integrity, validate FASTQ, or provide biological evidence.
 
 Task 2.3 remains blocked on a trusted transfer-failure contract. The metadata

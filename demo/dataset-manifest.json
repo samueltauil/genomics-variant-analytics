@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "manifest_id": "SYN-PG-MANIFEST-001",
+  "source_dataset": {
+    "provider": "Illumina",
+    "name": "Platinum Genomes",
+    "release": "2017-1.0",
+    "authorization_basis": "azure-open-datasets-public-sample",
+    "authorization_uri": "https://learn.microsoft.com/azure/open-datasets/dataset-genomics-data-lake",
+    "collection_uri": "https://datasetplatinumgenomes.blob.core.windows.net/dataset",
+    "collection_path": "2017-1.0/hg38"
+  },
+  "reference": {
+    "build": "GRCh38",
+    "immutable_source_version": "2017-1.0/hg38",
+    "compatibility_status": "validation-required-before-compute"
+  },
+  "synthetic_identity_policy": {
+    "subject_id_pattern": "^SYN-PG-SUBJECT-[0-9]{4}$",
+    "sample_id_pattern": "^SYN-PG-SAMPLE-[0-9]{4}$",
+    "cohort_id_pattern": "^SYN-PG-COHORT-[0-9]{2}$"
+  },
+  "identities": [
+    {
+      "subject_id": "SYN-PG-SUBJECT-0001",
+      "sample_id": "SYN-PG-SAMPLE-0001",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0002",
+      "sample_id": "SYN-PG-SAMPLE-0002",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0003",
+      "sample_id": "SYN-PG-SAMPLE-0003",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0004",
+      "sample_id": "SYN-PG-SAMPLE-0004",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0005",
+      "sample_id": "SYN-PG-SAMPLE-0005",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0006",
+      "sample_id": "SYN-PG-SAMPLE-0006",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0007",
+      "sample_id": "SYN-PG-SAMPLE-0007",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0008",
+      "sample_id": "SYN-PG-SAMPLE-0008",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0009",
+      "sample_id": "SYN-PG-SAMPLE-0009",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0010",
+      "sample_id": "SYN-PG-SAMPLE-0010",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0011",
+      "sample_id": "SYN-PG-SAMPLE-0011",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0012",
+      "sample_id": "SYN-PG-SAMPLE-0012",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0013",
+      "sample_id": "SYN-PG-SAMPLE-0013",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0014",
+      "sample_id": "SYN-PG-SAMPLE-0014",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0015",
+      "sample_id": "SYN-PG-SAMPLE-0015",
+      "cohort_id": "SYN-PG-COHORT-01"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0016",
+      "sample_id": "SYN-PG-SAMPLE-0016",
+      "cohort_id": "SYN-PG-COHORT-02"
+    },
+    {
+      "subject_id": "SYN-PG-SUBJECT-0017",
+      "sample_id": "SYN-PG-SAMPLE-0017",
+      "cohort_id": "SYN-PG-COHORT-01"
+    }
+  ]
+}
