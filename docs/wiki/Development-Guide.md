@@ -50,7 +50,7 @@ Arrival means first observation in UTC, not exact transfer start; it survives gr
 
 Optionally supply `--completion-marker '{run_id}/RTAComplete.txt'` with a new inventory database. Templates accept `{run_id}`, `{sample_id}` and `{path}`; the marker must stay within the root and be at least as new as the payload. This is an opt-in example, not an assumed instrument convention. The root, parsing pattern and marker policy are bound to the database. Existing task 2.1 databases upgrade in place with markers disabled.
 
-Stability is not proof of success: a writer can pause or leave a truncated file. Task 2.3 requires trusted expected sizes/checksums or vendor failure signals and a timeout; that contract is unresolved. Failure/retry handling and staging remain pending. Do not treat this inventory as permission to stage data.
+Stability is not proof of success: a writer can pause or leave a truncated file. Task 2.3 therefore declares failure only against a transfer manifest in which the sending run states each file's expected size, paired with a stall deadline; without that manifest the scanner classifies no failure and holds nothing as complete for that run. Staging remains pending. Do not treat this inventory as permission to stage data.
 
 Both landing tools reject UNC/device paths and symlink/reparse redirects; on Windows they require fixed local drives. These guards are not a sandbox against path races or every POSIX mount mechanism. Use synthetic data and trusted directories. Keep generated inventories outside Git; `.sqlite3` files and their sidecars are ignored. Detailed current usage is in the development working tree's `infra/README.md` and `docs/landing-inventory.md`.
 

@@ -10,7 +10,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from scripts.scan_landing import poll_inventory, scan_once
+from scripts.scan_landing import (
+    MANIFEST_MAX_BYTES, available_for_staging, poll_inventory, scan_once,
+)
 
 
 SCANNER = Path(__file__).resolve().parents[1] / "scripts" / "scan_landing.py"
@@ -252,6 +254,190 @@ class LandingScanTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["file_count"], 1)
         self.assertEqual(self.file.read_bytes(), b"synthetic test bytes only")
+
+
+class TransferFailureTests(unittest.TestCase):
+    """Task 2.3: failure is declared against a manifest's expected size, never inferred from stability."""
+
+    MANIFEST = "{run_id}/transfer-manifest.json"
+    REACHED = 1e-6
+    UNREACHED = 3600
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.directory = Path(self.temporary.name)
+        self.root = self.directory / "landing"
+        self.base = self.root / "SYN-RUN-001" / "Data" / "Intensities" / "BaseCalls"
+        self.base.mkdir(parents=True)
+        self.inventory = self.directory / "inventory.sqlite3"
+        self.first = "SYN-RUN-001/Data/Intensities/BaseCalls/SYN-SAMPLE-001_S1_L001_R1_001.fastq.gz"
+        self.second = "SYN-RUN-001/Data/Intensities/BaseCalls/SYN-SAMPLE-001_S1_L001_R2_001.fastq.gz"
+
+    def write(self, relative, size):
+        path = self.root / relative
+        path.write_bytes(b"s" * size)
+        return path
+
+    def declare(self, sizes, run_id="SYN-RUN-001", relative=None):
+        document = {"run_id": run_id, "files": [
+            {"path": path, "size_bytes": size} for path, size in sizes.items()
+        ]}
+        path = self.root / (relative or self.MANIFEST.format(run_id=run_id))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(document))
+        return path
+
+    def scan(self, stall_seconds=REACHED):
+        return scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST,
+                         stall_seconds=stall_seconds)
+
+    def record(self, report, relative):
+        return next(entry for entry in report["files"] if entry["path"] == relative)
+
+    def test_interrupted_transfer_is_failed_and_withheld_from_staging(self):
+        self.declare({self.first: 200})
+        self.write(self.first, 50)
+        self.assertEqual(self.record(self.scan(), self.first)["state"], "arriving")
+        report = self.scan()
+        record = self.record(report, self.first)
+        self.assertEqual(record["state"], "failed")
+        self.assertEqual(record["failure_reason"], "incomplete-transfer")
+        self.assertEqual(record["declared_size_bytes"], 200)
+        self.assertEqual(record["run_id"], "SYN-RUN-001")
+        self.assertEqual(record["sample_id"], "SYN-SAMPLE-001")
+        self.assertEqual(report["failed_count"], 1)
+        self.assertNotIn(self.first, available_for_staging(report))
+
+    def test_stable_short_file_never_completes_before_the_deadline(self):
+        self.declare({self.first: 200})
+        self.write(self.first, 50)
+        states = [self.record(self.scan(self.UNREACHED), self.first)["state"] for _ in range(3)]
+        self.assertEqual(states, ["arriving", "arriving", "arriving"])
+
+    def test_resend_replaces_the_failed_entry_without_affecting_siblings(self):
+        self.declare({self.first: 200, self.second: 120})
+        self.write(self.first, 50)
+        self.write(self.second, 120)
+        first_report = self.scan()
+        self.scan()
+        failed = self.record(self.scan(), self.first)
+        self.assertEqual((failed["state"], failed["failure_reason"]), ("failed", "incomplete-transfer"))
+        self.assertEqual(self.record(self.scan(), self.second)["state"], "complete")
+
+        self.write(self.first, 200)
+        retried = self.record(self.scan(), self.first)
+        self.assertEqual(retried["state"], "arriving")
+        self.assertIsNone(retried["failure_reason"])
+        self.assertEqual(retried["arrival_timestamp"],
+                         self.record(first_report, self.first)["arrival_timestamp"])
+
+        report = self.scan()
+        self.assertEqual(self.record(report, self.first)["state"], "complete")
+        self.assertEqual(self.record(report, self.second)["state"], "complete")
+        self.assertEqual(report["failed_count"], 0)
+        self.assertEqual(len([entry for entry in report["files"] if entry["path"] == self.first]), 1)
+        self.assertCountEqual(available_for_staging(report), [self.first, self.second])
+
+    def test_declared_file_that_never_arrives_is_failed_with_its_identifiers(self):
+        self.declare({self.first: 200})
+        self.scan()
+        record = self.record(self.scan(), self.first)
+        self.assertEqual(record["state"], "failed")
+        self.assertEqual(record["failure_reason"], "missing-transfer")
+        self.assertEqual(record["run_id"], "SYN-RUN-001")
+        self.assertEqual(record["sample_id"], "SYN-SAMPLE-001")
+        self.assertFalse(record["present"])
+        self.assertEqual(record["declared_size_bytes"], 200)
+
+    def test_file_larger_than_declared_fails_on_first_observation(self):
+        self.declare({self.first: 10})
+        self.write(self.first, 40)
+        record = self.record(self.scan(self.UNREACHED), self.first)
+        self.assertEqual(record["state"], "failed")
+        self.assertEqual(record["failure_reason"], "size-exceeds-declared")
+
+    def test_run_without_a_usable_manifest_is_held_arriving(self):
+        self.write(self.first, 50)
+        for payload in (None, "{not json", json.dumps({"run_id": "SYN-RUN-001"}),
+                        json.dumps({"run_id": "SYN-RUN-002", "files": [
+                            {"path": self.first, "size_bytes": 50}]}),
+                        json.dumps({"run_id": "SYN-RUN-001", "files": [
+                            {"path": "SYN-RUN-002/other.fastq", "size_bytes": 1}]}),
+                        json.dumps({"run_id": "SYN-RUN-001", "files": [
+                            {"path": self.first, "size_bytes": True}]}),
+                        json.dumps({"run_id": "SYN-RUN-001", "files": [
+                            {"path": "../escape", "size_bytes": 1}]}),
+                        json.dumps({"run_id": "SYN-RUN-001", "files": [
+                            {"path": "SYN-RUN-001/transfer-manifest.json", "size_bytes": 1}]}),
+                        json.dumps({"run_id": "SYN-RUN-001", "files": [
+                            {"path": self.first, "size_bytes": 1},
+                            {"path": self.first, "size_bytes": 2}]})):
+            with self.subTest(payload=payload):
+                inventory = self.directory / ("case-%d.sqlite3" % abs(hash(payload)))
+                manifest = self.root / "SYN-RUN-001" / "transfer-manifest.json"
+                manifest.unlink(missing_ok=True)
+                if payload is not None:
+                    manifest.write_text(payload)
+                report = scan_once(self.root, inventory, transfer_manifest=self.MANIFEST,
+                                   stall_seconds=self.REACHED)
+                report = scan_once(self.root, inventory, transfer_manifest=self.MANIFEST,
+                                   stall_seconds=self.REACHED)
+                record = self.record(report, self.first)
+                self.assertEqual(record["state"], "arriving")
+                self.assertEqual(record["metadata_error"], "manifest-unavailable")
+                self.assertIn("SYN-RUN-001", report["manifest_errors"])
+                self.assertEqual(available_for_staging(report), [])
+
+    def test_oversized_manifest_is_rejected_without_being_read(self):
+        self.write(self.first, 50)
+        manifest = self.declare({self.first: 50})
+        manifest.write_bytes(b" " * (MANIFEST_MAX_BYTES + 1))
+        report = self.scan()
+        self.assertIn("exceeds", report["manifest_errors"]["SYN-RUN-001"])
+
+    def test_manifest_requires_a_stall_deadline_and_a_run_template(self):
+        self.declare({self.first: 200})
+        with self.assertRaisesRegex(ValueError, "stall deadline"):
+            scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST)
+        for template in ("manifest.json", "{sample_id}/manifest.json", "{run_id}/{run_id}.json",
+                         "{path}/manifest.json", "../{run_id}.json", "/{run_id}.json"):
+            with self.subTest(template=template):
+                with self.assertRaises(ValueError):
+                    scan_once(self.root, self.inventory, transfer_manifest=template, stall_seconds=5)
+        for stall in (0, -1, float("nan"), float("inf"), True):
+            with self.subTest(stall=stall):
+                with self.assertRaisesRegex(ValueError, "Stall deadline"):
+                    scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST,
+                              stall_seconds=stall)
+        self.assertFalse(self.inventory.exists())
+
+    def test_failure_policy_is_bound_to_the_inventory(self):
+        self.declare({self.first: 200})
+        self.scan()
+        with self.assertRaisesRegex(ValueError, "already bound"):
+            scan_once(self.root, self.inventory)
+        with self.assertRaisesRegex(ValueError, "already bound"):
+            self.scan(stall_seconds=99)
+
+    def test_unmanifested_scan_reports_no_failure_detection(self):
+        self.write(self.first, 50)
+        report = scan_once(self.root, self.inventory)
+        self.assertEqual(report["failure_detection"], "not-evaluated")
+        self.assertEqual(report["failed_count"], 0)
+        self.assertEqual(report["manifest_errors"], {})
+
+    def test_cli_forwards_transfer_manifest_and_stall_deadline(self):
+        self.declare({self.first: 200})
+        self.write(self.first, 50)
+        command = [sys.executable, "-I", str(SCANNER), "--root", str(self.root),
+                   "--inventory", str(self.inventory), "--transfer-manifest", self.MANIFEST,
+                   "--stall-seconds", "0.000001"]
+        for _ in range(2):
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(self.record(report, self.first)["failure_reason"], "incomplete-transfer")
 
 
 if __name__ == "__main__":
