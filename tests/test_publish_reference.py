@@ -1,8 +1,11 @@
 import hashlib
 import io
 import json
+import sqlite3
 import unittest
+from datetime import datetime
 
+from scripts.governance import AuthorizationError, GovernancePolicy, reference_subject
 from scripts.publish_reference import (
     ReferenceExistsError, ReferenceZone, manifest_document, parse_inventory, reference_path,
     validate_entry,
@@ -50,7 +53,7 @@ def artifact(filename, payload, source=None):
 class ReferencePublicationTests(unittest.TestCase):
     def setUp(self):
         self.transport = RecordingTransport()
-        self.zone = ReferenceZone(self.transport)
+        self.zone = ReferenceZone(self.transport, None, None)
 
     def test_published_version_records_a_checksum_for_every_artifact(self):
         payload = b"synthetic reference bytes"
@@ -151,6 +154,110 @@ class ReferencePublicationTests(unittest.TestCase):
         self.assertEqual(parse_inventory([]), [])
         self.assertEqual(self.zone.inventory(), [])
         self.assertIsNone(self.zone.get_manifest(GRCH38))
+
+
+class ReferenceAuditTests(unittest.TestCase):
+    """Task 4.4: every reference publish and read is audited, including the denials."""
+
+    PUBLISHER = "SYN-REFERENCE-PUBLISHER"
+    READER = "SYN-REFERENCE-READER"
+
+    def setUp(self):
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.row_factory = sqlite3.Row
+        self.addCleanup(self.connection.close)
+        self.policy = GovernancePolicy(self.connection)
+        self.policy.grant_reference_role(self.PUBLISHER, "reference_publisher")
+        self.policy.grant_reference_role(self.READER, "reference_reader")
+        self.transport = RecordingTransport()
+
+    def zone(self, principal_id):
+        return ReferenceZone(self.transport, self.policy, principal_id)
+
+    def publish(self, principal_id, entry=GRCH38):
+        return self.zone(principal_id).publish(
+            entry, [artifact("reference.fa.gz", b"synthetic reference bytes")],
+            "2026-09-11T00:00:00Z",
+        )
+
+    def test_authorized_and_denied_publish_both_produce_a_complete_audit_entry(self):
+        self.publish(self.PUBLISHER)
+        with self.assertRaises(AuthorizationError):
+            self.publish(self.READER, HG19)
+
+        allowed, denied = self.policy.reference_audit_entries()
+        for entry, principal, operation in (
+            (allowed, self.PUBLISHER, "publish_reference"),
+            (denied, self.READER, "deny:publish_reference"),
+        ):
+            with self.subTest(operation=operation):
+                self.assertEqual(entry["principal_id"], principal)
+                self.assertEqual(entry["operation"], operation)
+                self.assertEqual(entry["affected_data"]["entry_type"], "genome")
+                self.assertEqual(entry["affected_data"]["reference_role"], "reference_publisher")
+                self.assertTrue(entry["recorded_at"].endswith("Z"))
+                self.assertIsNotNone(
+                    datetime.fromisoformat(entry["recorded_at"].replace("Z", "+00:00")).tzinfo
+                )
+        self.assertEqual(allowed["affected_data"]["entry"], "genome/GRCh38/2026-09-11")
+        self.assertEqual(allowed["affected_data"]["version"], "2026-09-11")
+        self.assertEqual(denied["affected_data"]["entry"], "genome/hg19/2026-09-11")
+        self.assertEqual(denied["affected_data"]["version"], "2026-09-11")
+        self.assertTrue(self.policy.audit.verify())
+
+    def test_denied_publish_writes_nothing_to_the_zone(self):
+        with self.assertRaises(AuthorizationError):
+            self.publish(self.READER)
+        self.assertEqual(self.transport.objects, {})
+        self.assertFalse(self.zone(self.PUBLISHER).is_published(GRCH38))
+
+    def test_reads_are_audited_against_the_reader_role(self):
+        self.publish(self.PUBLISHER)
+        reader = self.zone(self.READER)
+        self.assertIsNotNone(reader.get_manifest(GRCH38))
+        self.assertEqual(len(reader.inventory()), 1)
+
+        operations = [entry["operation"] for entry in self.policy.reference_audit_entries()]
+        self.assertEqual(operations, [
+            "publish_reference", "read_reference_manifest", "list_reference_manifests",
+        ])
+
+    def test_a_publisher_grant_does_not_carry_read_access(self):
+        self.publish(self.PUBLISHER)
+        with self.assertRaises(AuthorizationError):
+            self.zone(self.PUBLISHER).get_manifest(GRCH38)
+        with self.assertRaises(AuthorizationError):
+            self.zone(self.READER).publish(
+                HG19, [artifact("reference.fa.gz", b"synthetic")], "2026-09-11T00:00:00Z",
+            )
+        denials = [entry for entry in self.policy.reference_audit_entries()
+                   if entry["operation"].startswith("deny:")]
+        self.assertEqual([entry["affected_data"]["reference_role"] for entry in denials],
+                         ["reference_reader", "reference_publisher"])
+
+    def test_an_absent_version_is_audited_as_a_read_attempt(self):
+        self.assertIsNone(self.zone(self.READER).get_manifest(GRCH38))
+        entry = self.policy.reference_audit_entries()[-1]
+        self.assertEqual(entry["operation"], "read_reference_manifest")
+        self.assertEqual(entry["affected_data"]["entry"], "genome/GRCh38/2026-09-11")
+
+    def test_a_governor_and_principal_must_be_supplied_together(self):
+        for governor, principal in ((self.policy, None), (None, self.PUBLISHER)):
+            with self.subTest(principal=principal):
+                with self.assertRaisesRegex(ValueError, "together"):
+                    ReferenceZone(self.transport, governor, principal)
+
+    def test_audit_subjects_are_validated_rather_than_invented(self):
+        for entry in ({"type": "genome", "name": "GRCh38"},
+                      {"type": "genome", "name": "GRCh38", "version": "", "extra": 1},
+                      {"type": "genome", "name": "GRCh38", "version": None}):
+            with self.subTest(entry=entry):
+                with self.assertRaises(ValueError):
+                    reference_subject(entry)
+        self.assertEqual(reference_subject(None),
+                         {"entry": None, "entry_type": None, "entry_name": None, "version": None})
+        with self.assertRaises(ValueError):
+            self.policy.authorize_reference(self.PUBLISHER, "reference_owner", "publish_reference")
 
 
 if __name__ == "__main__":

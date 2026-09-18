@@ -3,6 +3,10 @@
 Storage access is supplied as a transport so the publication rules can be exercised without a
 storage account. Each version is written once: the manifest is the commit point, and an entry whose
 manifest already exists is refused before any artifact is written.
+
+Every read and publish is routed through a governor that audits the decision. The governor is a
+required argument with no default, so an ungoverned zone has to be requested explicitly and is
+visible at the call site.
 """
 
 import hashlib
@@ -80,8 +84,22 @@ def parse_inventory(manifests):
 class ReferenceZone:
     """Publication and listing over a write-once reference container."""
 
-    def __init__(self, transport):
+    def __init__(self, transport, governor, principal_id):
+        if (governor is None) != (principal_id is None):
+            raise ValueError(
+                "Supply a governor and a principal together, or pass None for both to run"
+                " an explicitly unaudited zone."
+            )
         self._transport = transport
+        self._governor = governor
+        self._principal_id = principal_id
+
+    def _authorize(self, reference_role, operation, entry=None):
+        if self._governor is None:
+            return None
+        return self._governor.authorize_reference(
+            self._principal_id, reference_role, operation, entry
+        )
 
     def is_published(self, entry):
         return self._transport.exists(reference_path(entry))
@@ -94,6 +112,7 @@ class ReferenceZone:
         validate_entry(entry)
         if not artifacts:
             raise ValueError("A published version must contain at least one artifact.")
+        self._authorize("reference_publisher", "publish_reference", entry)
         if self.is_published(entry):
             raise ReferenceExistsError(
                 f"{entry['type']}/{entry['name']}/{entry['version']} is already published;"
@@ -132,6 +151,7 @@ class ReferenceZone:
         return document
 
     def manifests(self):
+        self._authorize("reference_reader", "list_reference_manifests")
         documents = []
         for path in sorted(self._transport.list("")):
             if path.endswith("/" + MANIFEST_NAME):
@@ -151,6 +171,7 @@ class ReferenceZone:
     def get_manifest_bytes(self, entry):
         """Return the exact stored manifest bytes, or None when the version is absent."""
         path = reference_path(entry)
+        self._authorize("reference_reader", "read_reference_manifest", entry)
         if not self._transport.exists(path):
             return None
         return self._transport.get(path)

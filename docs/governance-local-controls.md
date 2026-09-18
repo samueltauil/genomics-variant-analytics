@@ -32,6 +32,26 @@ Denied and approved attempts are recorded as `cross_workspace_transfer`
 events. No direct database or cloud data movement is performed by this local
 model.
 
+## Reference publish and read
+
+`reference_publisher` and `reference_reader` are independent grants; neither
+implies the other. `GovernancePolicy.authorize_reference` records a
+`reference_data` audit event for every attempt, naming the principal, the role,
+the entry as `type/name/version`, the version on its own, and the timestamp. A
+principal without the grant gets an `AuthorizationError` and a
+`deny:<operation>` entry, so a refused publish is as visible as an accepted one.
+
+`ReferenceZone` routes `publish` through `reference_publisher` and
+`get_manifest`, `get_manifest_bytes`, `manifests`, and `inventory` through
+`reference_reader`. Authorization runs before the write path, so a denied
+publish leaves the zone byte-for-byte unchanged. The governor and principal are
+required constructor arguments with no default: an unaudited zone must be asked
+for by passing `None` for both, which keeps every unaudited call site visible.
+The Azure client drivers in `scripts/Publish-Reference.ps1` and
+`scripts/Test-ReferenceData.ps1` do exactly that, because those runs have no
+durable audit store; routing the deployed publisher through a retained audit
+trail is not implemented.
+
 ## Classification
 
 `scripts/stage_records.py` requires one of the fixed classification labels on
@@ -45,7 +65,8 @@ No classification is inferred or fabricated.
 
 ## Append-only audit
 
-The audit table records pipeline executions, data access, reprocessing, and
+The audit table records pipeline executions, data access, reference publish and
+read decisions, reprocessing, and
 cross-workspace transfers with principal, operation, affected data, timestamp,
 and a SHA-256 hash chained to the previous entry. SQLite triggers reject
 updates and deletes, and `AuditTrail.verify()` checks the complete chain.

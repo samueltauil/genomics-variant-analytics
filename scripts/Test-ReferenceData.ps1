@@ -48,7 +48,8 @@ from scripts.publish_reference import ReferenceExistsError, ReferenceZone, refer
 from scripts.stage_landing import managed_identity_token
 
 transport = BlobTransport("__ACCOUNT__", "__CONTAINER__", managed_identity_token("__CLIENT_ID__"))
-zone = ReferenceZone(transport)
+# None governor: this acceptance probe has no durable audit store; see task 4.4.
+zone = ReferenceZone(transport, None, None)
 
 inventory = zone.inventory()
 print("INVENTORY|" + json.dumps(inventory))
