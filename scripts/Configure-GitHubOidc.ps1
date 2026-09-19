@@ -72,21 +72,55 @@ $registry = Invoke-Az @(
     '-o', 'json'
 ) 'Could not read the container registry.' | ConvertFrom-Json
 
+$oidcCustomization = Invoke-Gh @(
+    'api',
+    '-H', 'Accept: application/vnd.github+json',
+    "repos/$Repository/actions/oidc/customization/sub"
+) 'Could not read the repository OIDC subject configuration.' | ConvertFrom-Json
+
+$repositorySubject = "repo:$Repository"
+if (
+    $oidcCustomization.use_immutable_subject -eq $true -and
+    -not [string]::IsNullOrWhiteSpace([string]$oidcCustomization.sub_claim_prefix)
+) {
+    $repositorySubject = [string]$oidcCustomization.sub_claim_prefix
+}
+
 $subjects = [ordered]@{
-    'github-release-build' = "repo:${Repository}:environment:release-build"
-    'github-clinical'      = "repo:${Repository}:environment:clinical"
-    'github-research'      = "repo:${Repository}:environment:research"
+    'github-release-build' = "${repositorySubject}:environment:release-build"
+    'github-clinical'      = "${repositorySubject}:environment:clinical"
+    'github-research'      = "${repositorySubject}:environment:research"
 }
 
 foreach ($entry in $subjects.GetEnumerator()) {
-    $existing = & az identity federated-credential show `
+    $existingJson = & az identity federated-credential show `
         --subscription $SubscriptionId `
         --resource-group $ResourceGroupName `
         --identity-name $IdentityName `
         --name $entry.Key `
-        -o none 2>$null
+        -o json 2>$null
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Federated credential $($entry.Key) already exists."
+        $existing = $existingJson | ConvertFrom-Json
+        if ([string]$existing.subject -eq $entry.Value) {
+            Write-Host "Federated credential $($entry.Key) already matches the GitHub subject."
+            continue
+        }
+        if ($PSCmdlet.ShouldProcess(
+            $IdentityName,
+            "update $($entry.Key) subject to $($entry.Value)"
+        )) {
+            Invoke-Az @(
+                'identity', 'federated-credential', 'update',
+                '--subscription', $SubscriptionId,
+                '--resource-group', $ResourceGroupName,
+                '--identity-name', $IdentityName,
+                '--name', $entry.Key,
+                '--issuer', 'https://token.actions.githubusercontent.com',
+                '--subject', $entry.Value,
+                '--audiences', 'api://AzureADTokenExchange',
+                '-o', 'none'
+            ) "Could not update federated credential $($entry.Key)." | Out-Null
+        }
         continue
     }
     if ($PSCmdlet.ShouldProcess($IdentityName, "create $($entry.Key) for $($entry.Value)")) {

@@ -1,8 +1,11 @@
 import copy
+import json
+from pathlib import Path
 import subprocess
+import tempfile
 import unittest
 
-from scripts.supply_chain import verify_gh_attestations, verify_submission
+from scripts.supply_chain import augment_cyclonedx, verify_gh_attestations, verify_submission
 
 
 COMMIT = "a" * 40
@@ -28,6 +31,66 @@ def submission():
 
 
 class SupplyChainTests(unittest.TestCase):
+    def test_toolchain_components_are_added_to_cyclonedx(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sbom_path = root / "sbom.cdx.json"
+            toolchain_path = root / "toolchain.json"
+            sbom_path.write_text(
+                json.dumps(
+                    {
+                        "bomFormat": "CycloneDX",
+                        "specVersion": "1.6",
+                        "components": [
+                            {"type": "library", "name": "python", "version": "3.12"}
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            toolchain_path.write_text(
+                json.dumps(
+                    {
+                        "components": [
+                            {
+                                "name": "aligner",
+                                "version": "synthetic-aligner-1.0.0",
+                                "source_commit": "synthetic-placeholder",
+                            },
+                            {
+                                "name": "variant-caller",
+                                "version": "synthetic-variant-caller-1.0.0",
+                                "source_commit": "synthetic-placeholder",
+                            },
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            augment_cyclonedx(sbom_path, toolchain_path)
+            components = json.loads(sbom_path.read_text(encoding="utf-8"))["components"]
+            versions = {component["name"]: component["version"] for component in components}
+            self.assertEqual(versions["aligner"], "synthetic-aligner-1.0.0")
+            self.assertEqual(
+                versions["variant-caller"], "synthetic-variant-caller-1.0.0"
+            )
+
+    def test_invalid_toolchain_component_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sbom_path = root / "sbom.cdx.json"
+            toolchain_path = root / "toolchain.json"
+            sbom_path.write_text(
+                json.dumps({"bomFormat": "CycloneDX", "components": []}),
+                encoding="utf-8",
+            )
+            toolchain_path.write_text(
+                json.dumps({"components": [{"name": "aligner", "version": "1"}]}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "exactly"):
+                augment_cyclonedx(sbom_path, toolchain_path)
+
     def test_attested_submission_is_accepted_without_allocating(self):
         verified = verify_submission(submission())
         self.assertEqual(verified["pipeline_version"], "v0.1.0")
