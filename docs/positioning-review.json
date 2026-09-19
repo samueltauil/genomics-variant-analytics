@@ -20,6 +20,8 @@
     "pathogenicity"
   ],
   "reviewed_files": [
+    "README.md",
+    "SUPPORT.md",
     "docs/accelerator-kpis.md",
     "docs/analytics-query.md",
     "docs/claim-register.md",
@@ -38,18 +40,56 @@
     "docs/reference-submission.md",
     "docs/secondary-pipeline.md",
     "docs/variant-store.md",
-    "docs/wiki/_Sidebar.md",
     "docs/wiki/Architecture.md",
     "docs/wiki/Data-Model-and-Provenance.md",
     "docs/wiki/Demo-Readiness-and-Limitations.md",
     "docs/wiki/Development-Guide.md",
     "docs/wiki/Home.md",
     "docs/wiki/Repository-Guardrails.md",
-    "infra/README.md",
-    "README.md",
-    "SUPPORT.md"
+    "docs/wiki/_Sidebar.md",
+    "infra/README.md"
   ],
   "flagged_matches": [
+    {
+      "path": "README.md",
+      "line": 12,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "README.md",
+      "line": 12,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "README.md",
+      "line": 12,
+      "boundary": "customer-reference",
+      "rule": "customer-attribution",
+      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "SUPPORT.md",
+      "line": 9,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "This accelerator is not a supported Microsoft offering, product, service, or",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "SUPPORT.md",
+      "line": 11,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "does not provide access to Microsoft product support.",
+      "disposition": "explicitly negated or prohibited"
+    },
     {
       "path": "docs/analytics-query.md",
       "line": 126,
@@ -256,46 +296,6 @@
       "boundary": "released-blueprint",
       "rule": "released-offering",
       "text": "This is a reference architecture and demo accelerator, not a released Microsoft blueprint, a supported product, or a clinical decision system. No compliance certification or confirmed customer deployment is claimed.",
-      "disposition": "explicitly negated or prohibited"
-    },
-    {
-      "path": "README.md",
-      "line": 12,
-      "boundary": "released-blueprint",
-      "rule": "released-offering",
-      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
-      "disposition": "explicitly negated or prohibited"
-    },
-    {
-      "path": "README.md",
-      "line": 12,
-      "boundary": "compliance",
-      "rule": "automatic-compliance",
-      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
-      "disposition": "explicitly negated or prohibited"
-    },
-    {
-      "path": "README.md",
-      "line": 12,
-      "boundary": "customer-reference",
-      "rule": "customer-attribution",
-      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
-      "disposition": "explicitly negated or prohibited"
-    },
-    {
-      "path": "SUPPORT.md",
-      "line": 9,
-      "boundary": "released-blueprint",
-      "rule": "released-offering",
-      "text": "This accelerator is not a supported Microsoft offering, product, service, or",
-      "disposition": "explicitly negated or prohibited"
-    },
-    {
-      "path": "SUPPORT.md",
-      "line": 11,
-      "boundary": "released-blueprint",
-      "rule": "released-offering",
-      "text": "does not provide access to Microsoft product support.",
       "disposition": "explicitly negated or prohibited"
     }
   ],
