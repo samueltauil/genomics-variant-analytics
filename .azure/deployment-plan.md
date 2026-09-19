@@ -1,9 +1,9 @@
 # Azure Deployment Plan
 
-Status: Deployed (disposable test environment)
-Date: 2026-09-10
+Status: Partial fresh foundation retained; verification VM deallocated
+Date: 2026-09-19
 Change: add-genomics-variant-accelerator
-Mode: Add components to the existing accelerator
+Mode: Disposable acceptance environment
 
 ## Authorization And Scope
 
@@ -12,9 +12,10 @@ end-to-end implementation tests, followed by removal of all resources created
 for those tests. This supersedes the earlier local-only pause. Existing resources
 and unrelated workloads must not be modified or deleted.
 
-Subscription selection, region, numeric spending limit and resource sizing are
-not yet confirmed. No resource creation is approved by this planning skeleton.
-Environment identifiers and credentials must not be committed to Git or the wiki.
+The current work is authorized under a USD 150 total ceiling in `eastus2`.
+The tagged boundary is `rg-genomics-20260919`, with an October 3, 2026 expiry.
+Credentials, subscription identifiers and tenant identifiers must not be
+committed to Git or the wiki.
 
 ## Implementation Sequence
 
@@ -69,9 +70,10 @@ These are subscription policy, not configuration defects, and must not be worked
 - Blob versioning is unavailable on hierarchical-namespace accounts, so reference
   immutability in task 4.2 cannot rely on it.
 
-## Verified Results
+## Historical Verified Results
 
-Produced by `scripts/Test-Environment.ps1` against the deployed environment:
+Produced by `scripts/Test-Environment.ps1` against the earlier disposable
+environment that was removed on September 18, 2026:
 
 | Check | Result |
 |---|---|
@@ -86,6 +88,23 @@ Produced by `scripts/Test-Environment.ps1` against the deployed environment:
 
 The SMB write exceeds the provisioned rate while `allowSharedKeyAccess` stays disabled, which is the
 acceptance task 1.3 requires.
+
+## Current Fresh Deployment
+
+Read back on September 19, 2026:
+
+| Area | State |
+|---|---|
+| Identities, landing account, private endpoints, Data Factory | Resources exist; no fresh component acceptance claimed |
+| Object-storage deployment | Failed |
+| Storage Actions lifecycle deployment | Failed |
+| Network redeployment | Cancelled during finalization |
+| Verification VM | Deallocated |
+| Resource-group expiry | October 3, 2026 |
+
+Storage and networking resources remain deployed and may continue to accrue
+cost. The retained group is not a ready environment and does not replace the
+historical acceptance evidence above.
 
 ## Cost And Cleanup
 
@@ -111,10 +130,12 @@ acceptance task 1.3 requires.
 
 ## Validation Proof
 
-The deployment is idempotent and was re-run to completion; `az deployment sub what-if`
-reported the expected changes before the first apply. Acceptance results are recorded above.
-Local unit tests remain separate evidence and do not verify any cloud behavior.
+The earlier deployment was re-run to completion and supplied the historical
+acceptance results above. The September 19 fresh deployment did not complete
+all component deployments or idempotency acceptance. Local unit tests remain
+separate evidence and do not verify cloud behavior.
 
-Tear down with `./scripts/Remove-Accelerator.ps1 -EnvironmentName demo`. The provisioned v2
-share bills on provisioned capacity, IOPS and throughput whether or not it is used, and the
-verification client bills while running.
+Tear down the current group with
+`./scripts/Remove-Accelerator.ps1 -EnvironmentName 20260919`. The provisioned
+share, storage and networking resources can bill while retained. The
+verification VM is currently deallocated.

@@ -9,6 +9,11 @@ Read this before every delivery. The distinctions below are not stylistic — se
 Each boundary gives supported phrasing and phrasing to avoid. When a customer question falls outside these, say you will follow up rather than improvising a claim.
 
 Any new presenter-facing material gets checked against this register before it ships.
+Run `python scripts/review_positioning.py --review-date YYYY-MM-DD
+--check-report docs/positioning-review.json`; regenerate the report with
+`--write-report` after reviewing a deliberate material change. The checked
+[assumption register](assumption-register.json) keeps every proposal assumption
+labelled until explicit reviewed confirmation is recorded.
 
 ---
 

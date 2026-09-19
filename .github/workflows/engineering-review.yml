@@ -1,0 +1,39 @@
+name: Engineering review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - ".github/workflows/**"
+      - "workflows/**"
+      - "containers/**"
+      - "**/Dockerfile"
+      - "**/*.dockerfile"
+      - "scripts/variant_store.py"
+      - "openspec/changes/add-genomics-variant-accelerator/specs/variant-store/delta-variant-store/spec.md"
+
+permissions:
+  contents: read
+
+jobs:
+  provenance-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - name: Check out trusted review policy
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch pull request objects without executing proposed code
+        run: git fetch --no-tags origin "$PR_BASE_SHA" "$PR_HEAD_SHA"
+
+      - name: Review provenance-affecting changes
+        run: >-
+          python3 -I scripts/review_engineering_changes.py
+          --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA"

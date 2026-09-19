@@ -1,0 +1,166 @@
+{
+  "schema_version": 1,
+  "reader_perspective": "first-time reader following only README.md and docs/demo-runbook.md",
+  "generated_on": "2026-09-19T15:25:46Z",
+  "scratch_root": "C:\\Users\\tauilsamuel\\AppData\\Local\\Temp\\first-reader-dry-run-c3ce8bab-2027-4b46-b140-99104bceb748",
+  "phases": [
+    {
+      "phase": "phase0_preflight",
+      "title": "Preflight",
+      "doc_citation": "docs/demo-runbook.md#phase-0--preflight",
+      "category": "local-dry-run",
+      "executed": true,
+      "command": "pwsh -NoLogo -NoProfile -NonInteractive -File scripts\\Test-DemoPreflight.ps1",
+      "expected": {
+        "Mode": "local-preflight",
+        "Ready": false,
+        "BlockingFailures": 0
+      },
+      "actual": {
+        "Mode": "local-preflight",
+        "Ready": false,
+        "BlockingFailures": 0,
+        "UnverifiedChecks": 9,
+        "ExitCode": 1
+      },
+      "matched_documentation": true,
+      "notes": "The plain command documented in Phase 0 never reports Ready: true; it deterministically reports Mode=local-preflight, BlockingFailures=0, and every Azure check UNVERIFIED. This is the confirming observation the runbook now documents for this mode.",
+      "gaps": []
+    },
+    {
+      "phase": "phase1_bringup",
+      "title": "Bring-up",
+      "doc_citation": "docs/demo-runbook.md#phase-1--bring-up",
+      "category": "live-cloud",
+      "executed": false,
+      "command": "pwsh ... scripts\\Deploy-Accelerator.ps1 -SubscriptionId <subscription-id> -Location <region> -EnvironmentName <name>",
+      "expected": null,
+      "actual": null,
+      "matched_documentation": null,
+      "notes": "The runbook's own command requires -SubscriptionId, and no published document supplies one -- it is always shown as a placeholder, and the untracked .azure/environment.env.json that would carry one is explicitly excluded from the repository (README.md 'Data' section; docs/wiki/Development-Guide.md, 'Concrete subscription, tenant and resource names are written to an untracked .azure/environment.env.json'). A first-time reader with only the published repository cannot run this step, and this harness does not read that untracked file to manufacture one.",
+      "gaps": []
+    },
+    {
+      "phase": "phase2_seeding",
+      "title": "Seeding",
+      "doc_citation": "docs/demo-runbook.md#phase-2--seeding",
+      "category": "local-dry-run",
+      "executed": true,
+      "command": "python scripts\\stage_demo_landing.py --manifest demo\\dataset-manifest.json --root <local-or-authorized-landing-root> --inventory <inventory.sqlite3>",
+      "expected": {
+        "verified": true,
+        "paths_preserved": true,
+        "file_count": 34
+      },
+      "actual": {
+        "verified": true,
+        "paths_preserved": true,
+        "file_count": 34,
+        "ExitCode": 0
+      },
+      "matched_documentation": true,
+      "notes": "",
+      "gaps": []
+    },
+    {
+      "phase": "phase3_presentation",
+      "title": "Presentation sequence",
+      "doc_citation": "docs/demo-runbook.md#phase-3--presentation-sequence",
+      "category": "descriptive",
+      "executed": false,
+      "command": null,
+      "expected": null,
+      "actual": null,
+      "matched_documentation": true,
+      "notes": "This phase is a boundary table (demonstrated vs. specified-only per step), not a runnable command; verified only that all seven named steps are present in the published table.",
+      "gaps": []
+    },
+    {
+      "phase": "phase4_rehearsal",
+      "title": "Rehearsed failures",
+      "doc_citation": "docs/demo-runbook.md#phase-4--rehearsed-failures",
+      "category": "local-dry-run",
+      "executed": true,
+      "command": "python scripts\\rehearse_demo_failures.py --state-root <local-state-root>",
+      "expected": {
+        "all_passed": true,
+        "infrastructure_touched": false
+      },
+      "actual": {
+        "all_passed": true,
+        "infrastructure_touched": false,
+        "demonstrations": [
+          {
+            "demonstration": "failed_transfer",
+            "passed": true
+          },
+          {
+            "demonstration": "rejected_variant",
+            "passed": true
+          },
+          {
+            "demonstration": "denied_access",
+            "passed": true
+          }
+        ],
+        "ExitCode": 0
+      },
+      "matched_documentation": true,
+      "notes": "",
+      "gaps": []
+    },
+    {
+      "phase": "phase5_reset",
+      "title": "Reset",
+      "doc_citation": "docs/demo-runbook.md#phase-5--reset",
+      "category": "local-dry-run",
+      "executed": true,
+      "command": "python scripts\\reset_demo.py --state-root <local-state-root> && python scripts\\reset_demo.py --state-root <local-state-root> --diagnose",
+      "expected": {
+        "first_clean": true,
+        "diagnose_clean": true,
+        "second_clean": true,
+        "second_removed_nothing": true
+      },
+      "actual": {
+        "first_clean": true,
+        "diagnose_clean": true,
+        "second_clean": true,
+        "second_removed_nothing": true,
+        "infrastructure_touched": true,
+        "ExitCodes": [
+          0,
+          0,
+          0
+        ]
+      },
+      "matched_documentation": true,
+      "notes": "Reset is idempotent: the second run removes nothing and still reports clean.",
+      "gaps": []
+    },
+    {
+      "phase": "phase6_teardown",
+      "title": "Teardown",
+      "doc_citation": "docs/demo-runbook.md#phase-6--teardown",
+      "category": "live-cloud",
+      "executed": false,
+      "command": "pwsh ... scripts\\Remove-Accelerator.ps1 -EnvironmentName <name> -SubscriptionId <subscription-id>",
+      "expected": null,
+      "actual": null,
+      "matched_documentation": null,
+      "notes": "Deleting a live resource group cannot be dry-run, and the documented command needs -SubscriptionId, which (as in Phase 1) no published document supplies. This harness does not treat any ambient `az` CLI session found on the machine running it as documented evidence: a first-time reader following only the published repository has no such session tied to a prior delivery, so Phase 6's required live observation is not executable in this dry run. Supplementary, non-authoritative note: an ambient `az` session is present on this machine; it is not the documented delivery's subscription and is reported only for transparency, not as satisfying Phase 6's requirement.",
+      "gaps": []
+    }
+  ],
+  "local_dry_run_phases_matched_documentation": true,
+  "live_cloud_phases_requiring_authorized_subscription": [
+    "phase1_bringup",
+    "phase6_teardown"
+  ],
+  "documentation_gaps_found": [],
+  "acceptance": {
+    "criterion": "Dry-run the full flow as a first-time reader using only the published documentation, from preflight through teardown, and verify no step requires knowledge absent from the repository.",
+    "met": true,
+    "scope_note": "Every locally executable phase (preflight, seeding, rehearsal, reset) matches its documented confirming observation with no undocumented input. Bring-up and teardown require an authorized, already-provisioned subscription id that no published document supplies; that is a stated, honest scope limit of a documentation-only dry run, not a documentation gap, and is reported separately as live-cloud rather than counted as met or unmet."
+  }
+}

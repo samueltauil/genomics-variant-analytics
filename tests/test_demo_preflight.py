@@ -10,6 +10,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PREFLIGHT = ROOT / "scripts" / "Test-DemoPreflight.ps1"
 RESET = ROOT / "scripts" / "reset_demo.py"
+IDENTIFIER_SCAN = ROOT / "scripts" / "check_environment_identifiers.py"
 
 
 def run_pwsh(*arguments):
@@ -156,6 +157,23 @@ class DemoPreflightTests(unittest.TestCase):
             self.assertIn(phrase, claims)
         self.assertIn("AI-assisted analysis is", runbook)
         self.assertIn("exploratory", runbook)
+
+    def test_tracked_repository_has_no_live_subscription_or_tenant_identifier(self):
+        result = subprocess.run(
+            [sys.executable, str(IDENTIFIER_SCAN)],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("No tracked Azure subscription or tenant identifiers found.", result.stdout)
+
+    def test_deploy_deallocates_only_a_client_it_started(self):
+        deploy = (ROOT / "scripts" / "Deploy-Accelerator.ps1").read_text()
+        self.assertIn("$startedVerificationClient = $true", deploy)
+        self.assertIn("if ($startedVerificationClient)", deploy)
+        self.assertIn("'vm', 'deallocate'", deploy)
 
 
 if __name__ == "__main__":

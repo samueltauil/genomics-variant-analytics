@@ -17,3 +17,8 @@ jobs:
           persist-credentials: false
       - name: Run synthetic repository tests
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Validate presenter positioning and assumptions
+        run: >-
+          python3 scripts/review_positioning.py
+          --review-date 2026-09-19
+          --check-report docs/positioning-review.json

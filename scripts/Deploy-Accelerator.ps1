@@ -37,7 +37,13 @@ param(
     [string] $DeployerObjectId,
 
     [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
-    [string] $PreflightSnapshotPath
+    [string] $PreflightSnapshotPath,
+
+    [Parameter(HelpMessage = 'Deploy the Storage Actions lifecycle task (task 3.5). Disable to skip it entirely.')]
+    [bool] $DeployStorageActions = $true,
+
+    [ValidateRange(0, 365)]
+    [int] $StorageActionsTierAfterDays = 1
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,6 +106,17 @@ function Invoke-Az {
     return $output
 }
 
+function ConvertTo-Iso8601String {
+    # ConvertFrom-Json can return ISO 8601-looking JSON string values as [DateTime] objects.
+    # Formatting explicitly here (rather than relying on string interpolation, which uses the
+    # current culture) keeps the value ARM-compatible regardless of the deserialized type.
+    param([Parameter(Mandatory)] $Value)
+    if ($Value -is [datetime]) {
+        return $Value.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ', [System.Globalization.CultureInfo]::InvariantCulture)
+    }
+    return [string]$Value
+}
+
 if (-not $SubscriptionId) {
     # The CLI default can change between runs, so a recorded environment wins over it.
     if (Test-Path -LiteralPath $environmentFile) {
@@ -140,6 +157,57 @@ else {
     $adminPublicKey = (Get-Content -LiteralPath "$keyPath.pub" -Raw).Trim()
 }
 
+$storageActionsStateFile = Join-Path $repositoryRoot '.azure/storage-actions.local.json'
+$storageActionsTierBeforeDateUtc = ''
+$storageActionsVerificationRunStartUtc = ''
+if ($DeployStorageActions) {
+    # Storage Actions conditions compare against a fixed instant, not a relative "N days ago"
+    # expression. Recomputing that instant on every deploy would make an unchanged environment
+    # report a change on every re-run, breaking the idempotency guarantee task 11.4 verifies. The
+    # first run computes and freezes both instants; later runs reuse them from local state.
+    if (Test-Path -LiteralPath $storageActionsStateFile) {
+        $existingState = Get-Content -LiteralPath $storageActionsStateFile -Raw | ConvertFrom-Json
+        # ConvertFrom-Json auto-detects ISO 8601-looking strings and returns them as [DateTime]
+        # objects; interpolating those into the parameter string would format them with the
+        # current culture (e.g. "09/19/2026 15:57:22") instead of ISO 8601, which ARM rejects.
+        $storageActionsTierBeforeDateUtc = ConvertTo-Iso8601String $existingState.tierBeforeDateUtc
+        $storageActionsVerificationRunStartUtc = ConvertTo-Iso8601String $existingState.verificationRunStartUtc
+
+        # ARM rejects a RunOnce startOn in the past. A frozen value only stays usable once the
+        # assignment already exists in Azure (ARM treats an unchanged trigger as no-op there); if
+        # it does not exist yet and the frozen start time has already elapsed, an earlier deploy
+        # attempt must have failed before creating it, so it is safe to roll the start time
+        # forward here without breaking the idempotency guarantee task 11.4 verifies.
+        $assignmentExists = [bool](& az resource list --subscription $SubscriptionId --resource-group "rg-genomics-$EnvironmentName" --resource-type Microsoft.Storage/storageAccounts/storageTaskAssignments -o tsv 2>$null)
+        $startTimeElapsed = ([datetime]::Parse($storageActionsVerificationRunStartUtc, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) -le (Get-Date).ToUniversalTime())
+        if (-not $assignmentExists -and $startTimeElapsed) {
+            $storageActionsVerificationRunStartUtc = (Get-Date).ToUniversalTime().AddMinutes(15).ToString('yyyy-MM-ddTHH:mm:ssZ')
+            ([ordered]@{
+                tierBeforeDateUtc       = $storageActionsTierBeforeDateUtc
+                verificationRunStartUtc = $storageActionsVerificationRunStartUtc
+                computedAtUtc           = $existingState.computedAtUtc
+                tierAfterDays           = $existingState.tierAfterDays
+            } | ConvertTo-Json) | Set-Content -LiteralPath $storageActionsStateFile -Encoding utf8
+            Write-Host "Rolled forward the elapsed, not-yet-applied Storage Actions verification start time in $storageActionsStateFile."
+        }
+        else {
+            Write-Host "Reusing frozen Storage Actions thresholds from $storageActionsStateFile."
+        }
+    }
+    else {
+        $nowUtc = (Get-Date).ToUniversalTime()
+        $storageActionsTierBeforeDateUtc = $nowUtc.AddDays(-$StorageActionsTierAfterDays).ToString('yyyy-MM-ddTHH:mm:ssZ')
+        $storageActionsVerificationRunStartUtc = $nowUtc.AddMinutes(15).ToString('yyyy-MM-ddTHH:mm:ssZ')
+        [ordered]@{
+            tierBeforeDateUtc       = $storageActionsTierBeforeDateUtc
+            verificationRunStartUtc = $storageActionsVerificationRunStartUtc
+            computedAtUtc           = $nowUtc.ToString('yyyy-MM-ddTHH:mm:ssZ')
+            tierAfterDays           = $StorageActionsTierAfterDays
+        } | ConvertTo-Json | Set-Content -LiteralPath $storageActionsStateFile -Encoding utf8
+        Write-Host "Computed and froze Storage Actions thresholds in $storageActionsStateFile."
+    }
+}
+
 Write-Host "Subscription : $($account.name)"
 Write-Host "Region       : $Location"
 Write-Host "Environment  : $EnvironmentName (expires $expiresOn)"
@@ -153,6 +221,9 @@ $parameters = @(
     "landingShareQuotaGiB=$ShareQuotaGiB"
     "landingProvisionedIops=$ShareIops"
     "landingProvisionedBandwidthMibps=$ShareBandwidthMibps"
+    "deployStorageActions=$($DeployStorageActions.ToString().ToLowerInvariant())"
+    "storageActionsTierBeforeDateUtc=$storageActionsTierBeforeDateUtc"
+    "storageActionsVerificationRunStartUtc=$storageActionsVerificationRunStartUtc"
 )
 
 $common = @(
@@ -200,6 +271,7 @@ $filesystem = $outputs.lakeFilesystem.value
 $clientName = $outputs.verificationClientName.value
 $stagingClientId = $outputs.stagingIdentityClientId.value
 $resourceGroupName = $outputs.resourceGroupName.value
+$startedVerificationClient = $false
 
 # The client is deallocated between runs to avoid idle compute charges.
 $power = Invoke-Az @(
@@ -211,10 +283,12 @@ if ($power -notmatch 'running') {
     Write-Host "  starting $clientName"
     Invoke-Az @('vm', 'start', '-g', $resourceGroupName, '-n', $clientName,
         '--subscription', $SubscriptionId, '-o', 'none') 'Could not start the client'
+    $startedVerificationClient = $true
 }
 
-$directoryList = ($taxonomy | ForEach-Object { "'$_'" }) -join ' '
-$taxonomyTemplate = @'
+try {
+    $directoryList = ($taxonomy | ForEach-Object { "'$_'" }) -join ' '
+    $taxonomyTemplate = @'
 set -eu
 token=$(curl -s -m 30 -H Metadata:true "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https%3A%2F%2Fstorage.azure.com%2F&client_id=__CLIENT_ID__" | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
 failed=0
@@ -226,54 +300,62 @@ done
 exit $failed
 '@
 
-$taxonomyScript = $taxonomyTemplate.
-    Replace('__CLIENT_ID__', $stagingClientId).
-    Replace('__DIRECTORIES__', $directoryList).
-    Replace('__ACCOUNT__', $lakeAccount).
-    Replace('__FILESYSTEM__', $filesystem)
+    $taxonomyScript = $taxonomyTemplate.
+        Replace('__CLIENT_ID__', $stagingClientId).
+        Replace('__DIRECTORIES__', $directoryList).
+        Replace('__ACCOUNT__', $lakeAccount).
+        Replace('__FILESYSTEM__', $filesystem)
 
-# run-command splits --scripts on whitespace, so the script is delivered as a file with LF endings.
-$scriptPath = Join-Path ([IO.Path]::GetTempPath()) "genomics-taxonomy-$([guid]::NewGuid().ToString('n')).sh"
-[IO.File]::WriteAllText($scriptPath, $taxonomyScript.Replace("`r`n", "`n"))
-try {
-    $runResult = Invoke-Az @(
-        'vm', 'run-command', 'invoke'
-        '--name', $clientName
-        '--resource-group', $resourceGroupName
-        '--subscription', $SubscriptionId
-        '--command-id', 'RunShellScript'
-        '--scripts', "@$scriptPath"
-        '-o', 'json'
-    ) 'Could not create the folder taxonomy' | ConvertFrom-Json
+    # run-command splits --scripts on whitespace, so the script is delivered as a file with LF endings.
+    $scriptPath = Join-Path ([IO.Path]::GetTempPath()) "genomics-taxonomy-$([guid]::NewGuid().ToString('n')).sh"
+    [IO.File]::WriteAllText($scriptPath, $taxonomyScript.Replace("`r`n", "`n"))
+    try {
+        $runResult = Invoke-Az @(
+            'vm', 'run-command', 'invoke'
+            '--name', $clientName
+            '--resource-group', $resourceGroupName
+            '--subscription', $SubscriptionId
+            '--command-id', 'RunShellScript'
+            '--scripts', "@$scriptPath"
+            '-o', 'json'
+        ) 'Could not create the folder taxonomy' | ConvertFrom-Json
+    }
+    finally {
+        Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
+    }
+
+    $runMessage = $runResult.value[0].message
+    $created = ([regex]::Matches($runMessage, '-> (201|409)')).Count
+    if ($created -ne $taxonomy.Count) {
+        throw "Folder taxonomy incomplete: $created of $($taxonomy.Count) directories.`n$runMessage"
+    }
+    Write-Host "Folder taxonomy created by the staging identity ($created directories)."
+
+    # Data Factory raises its managed private endpoints as pending connections on each account.
+    Write-Host 'Approving managed private endpoint connections.'
+    foreach ($accountName in @($outputs.landingStorageAccount.value, $lakeAccount)) {
+        $accountId = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$accountName"
+        $connections = Invoke-Az @(
+            'network', 'private-endpoint-connection', 'list', '--id', $accountId, '-o', 'json'
+        ) 'Could not list private endpoint connections' | ConvertFrom-Json
+        foreach ($connection in $connections) {
+            if ($connection.properties.privateLinkServiceConnectionState.status -eq 'Pending') {
+                Invoke-Az @(
+                    'network', 'private-endpoint-connection', 'approve'
+                    '--id', $connection.id
+                    '--description', 'Approved by Deploy-Accelerator'
+                    '-o', 'none'
+                ) "Could not approve $($connection.name)"
+                Write-Host "  approved $($connection.name)"
+            }
+        }
+    }
 }
 finally {
-    Remove-Item -LiteralPath $scriptPath -Force -ErrorAction SilentlyContinue
-}
-
-$runMessage = $runResult.value[0].message
-$created = ([regex]::Matches($runMessage, '-> (201|409)')).Count
-if ($created -ne $taxonomy.Count) {
-    throw "Folder taxonomy incomplete: $created of $($taxonomy.Count) directories.`n$runMessage"
-}
-Write-Host "Folder taxonomy created by the staging identity ($created directories)."
-
-# Data Factory raises its managed private endpoints as pending connections on each account.
-Write-Host 'Approving managed private endpoint connections.'
-foreach ($accountName in @($outputs.landingStorageAccount.value, $lakeAccount)) {
-    $accountId = "/subscriptions/$SubscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.Storage/storageAccounts/$accountName"
-    $connections = Invoke-Az @(
-        'network', 'private-endpoint-connection', 'list', '--id', $accountId, '-o', 'json'
-    ) 'Could not list private endpoint connections' | ConvertFrom-Json
-    foreach ($connection in $connections) {
-        if ($connection.properties.privateLinkServiceConnectionState.status -eq 'Pending') {
-            Invoke-Az @(
-                'network', 'private-endpoint-connection', 'approve'
-                '--id', $connection.id
-                '--description', 'Approved by Deploy-Accelerator'
-                '-o', 'none'
-            ) "Could not approve $($connection.name)"
-            Write-Host "  approved $($connection.name)"
-        }
+    if ($startedVerificationClient) {
+        Write-Host "  deallocating $clientName to avoid idle compute charges"
+        Invoke-Az @('vm', 'deallocate', '-g', $resourceGroupName, '-n', $clientName,
+            '--subscription', $SubscriptionId, '-o', 'none') 'Could not deallocate the verification client'
     }
 }
 
@@ -295,6 +377,8 @@ $environment = [ordered]@{
     stagingFactory    = $outputs.stagingFactoryName.value
     stagingPipeline   = $outputs.stagingPipelineName.value
     taxonomy          = $taxonomy
+    storageActionsTask       = $outputs.storageActionsTaskName.value
+    storageActionsAssignment = $outputs.storageActionsAssignmentName.value
     identities        = [ordered]@{
         ingestion = $outputs.ingestionIdentityClientId.value
         staging   = $outputs.stagingIdentityClientId.value

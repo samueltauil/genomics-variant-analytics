@@ -1,6 +1,6 @@
 # Architecture
 
-**Ingestion and staging are deployed and measured; everything downstream is specified only.** The goal is to preserve the laboratory's instrument configuration and folder conventions while adding storage staging, reproducible processing, and research analytics.
+**Ingestion and staging were deployed and measured in an earlier disposable environment, and a fresh tagged Azure foundation now exists with acceptance still in progress; processing, the variant store, metadata, governance, and analytics have local synthetic reference implementations, not deployed services.** The goal is to preserve the laboratory's instrument configuration and folder conventions while adding storage staging, reproducible processing, and research analytics.
 
 ## Planned Data Flow
 
@@ -50,7 +50,7 @@ The proposed object-storage taxonomy is `Ingest`, `Process`, `Failed`, `External
 
 ## Deployed Environment and Platform Constraints
 
-A disposable environment was deployed into a sandbox subscription on 2026-09-11 and removed afterwards. Its subscription policies are ordinary for a governed tenant and shaped the design more than any preference did. Treat them as likely in customer environments rather than as local quirks.
+A disposable environment was deployed into a sandbox subscription on 2026-09-10/11, remained in place while later tasks were exercised against it, and was fully torn down on 2026-09-18. A separate tagged resource group, `rg-genomics-20260919`, was then created in `eastus2` with an October 3, 2026 expiry tag. Identities, storage accounts, private endpoints, Data Factory and a verification VM exist. The VM was deallocated on September 19, 2026; fresh object-storage and Storage Actions deployments failed, and the active network redeployment was cancelled. Component acceptance and the full private-endpoint-only flow therefore remain incomplete. The subscription policies are ordinary for a governed tenant and shaped the design more than any preference did. Treat them as likely in customer environments rather than as local quirks.
 
 | Observed constraint | Consequence for the design |
 |---|---|

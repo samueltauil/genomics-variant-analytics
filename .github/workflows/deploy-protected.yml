@@ -1,0 +1,78 @@
+name: Protected deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Protected deployment target"
+        required: true
+        type: choice
+        options:
+          - clinical
+          - research
+
+permissions:
+  contents: read
+  id-token: write
+  deployments: write
+
+jobs:
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: ${{ inputs.environment }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+    steps:
+      - name: Refuse non-release refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == refs/tags/v* ]] || {
+            echo "Protected environments accept immutable release tags only." >&2
+            exit 1
+          }
+          [[ -n "${{ vars.AZURE_CLIENT_ID }}" && -n "${{ vars.AZURE_TENANT_ID }}" && -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" ]] || {
+            echo "Azure OIDC repository variables are required; no credential fallback is allowed." >&2
+            exit 1
+          }
+
+      - name: Check out the released commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Log in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify the target resource group
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$AZURE_RESOURCE_GROUP" ]] || {
+            echo "AZURE_RESOURCE_GROUP is required; deployment is fail-closed." >&2
+            exit 1
+          }
+          az group show --name "$AZURE_RESOURCE_GROUP" --query "{name:name,location:location}" -o json
+
+      - name: Record deployment provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deployment-record
+          cat > deployment-record/result.json <<EOF
+          {"environment":"${{ inputs.environment }}","approver":"${{ github.actor }}","commit":"${GITHUB_SHA}","outcome":"verified-target"}
+          EOF
+
+      - name: Upload deployment record
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-record-${{ inputs.environment }}-${{ github.run_id }}
+          path: deployment-record/result.json

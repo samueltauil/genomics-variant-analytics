@@ -4,10 +4,12 @@
 4.3 with an executor-independent compatibility gate. The
 [workflow submission path](../scripts/workflow_submission.py) applies the same
 compatibility check to a write-once `ReferenceZone`, resolves the exact
-published manifests, and invokes the allocator only after validation. It uses
-Python 3.10+ and the standard library. No reference downloads, cloud
-authentication, network requests or compute allocation occur in the local
-tests.
+published manifests through the governed reader path, and invokes the allocator
+only after validation. Each exact-manifest read records the submitting
+principal, operation, authorization outcome, reference type and name, immutable
+version, and UTC timestamp in the hash-chained audit trail. It uses Python 3.10+
+and the standard library. No reference downloads, cloud authentication, network
+requests or compute allocation occur in the local tests.
 
 ## Contract
 
@@ -107,7 +109,10 @@ declarations and inventory from a trusted source, verify the published artifacts
 record these pins in run provenance, and use this API before any pool creation.
 Attestation checks, permissions and budget/preflight gates remain separate
 requirements. A caller can bypass this Python function; it is not an authorization
-boundary or an installed cloud admission controller.
+boundary or an installed cloud admission controller. The local tests inject an
+in-memory SQLite governor and synthetic principals; the Azure reference clients
+still require a durable deployed audit sink before cloud-side auditing can be
+claimed.
 
 Synthetic tests cover incompatible build/annotation rejection before the
 allocator, missing explicit build/version without fallback, exact matching,

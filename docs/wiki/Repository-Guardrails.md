@@ -14,7 +14,7 @@
 | Additional PR rule | Active default-branch ruleset `22782462`, resolved review threads required, no bypass actors |
 | Secret scanning and push protection | Both enabled before and after a live, no-bypass synthetic credential-pattern rejection test |
 
-The PR author cannot self-approve. [PR #1](https://github.com/samueltauil/genomics-variant-analytics/pull/1) installed the workflows; [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10) holds the detailed acceptance record and remains pending review as of the date above.
+The PR author cannot self-approve. [PR #1](https://github.com/samueltauil/genomics-variant-analytics/pull/1) installed the workflows; [PR #10](https://github.com/samueltauil/genomics-variant-analytics/pull/10) holds the detailed acceptance record and merged on 2026-09-10.
 
 ## How the Gate Works
 
@@ -40,13 +40,13 @@ The negative cases branched independently. No biological data or credentials wer
 
 During the initial zero-approval configuration, GitHub accepted the empty commit from the already-open, green [PR #2](https://github.com/samueltauil/genomics-variant-analytics/pull/2) as a fast-forward merge. Independent approval was then required and the probe repeated successfully. The maintainer subsequently authorized returning both review counts to zero to unblock solo implementation. Strict checks, the PR rule, administrator enforcement, resolved threads, no bypass actors and force-push/deletion restrictions were verified unchanged. The green-PR fast-forward gap therefore applies again; earlier rejection probes are historical evidence, not a current guarantee.
 
-Test PRs #3-#9 are unmerged and their closure submissions were still pending at the last verification. They are intentional probes, not proposed product changes; do not approve or merge them.
+Test PRs #3-#9 were closed without merging, as intentional probes rather than proposed product changes.
 
 ## Secret Push Protection
 
 Task 1.2 was verified at 15:21 UTC on 2026-09-10 by a repository administrator. Secret scanning and repository push protection were already enabled; no setting was changed. A harmless control push succeeded, then a locally constructed, never-issued PAT-shaped value was rejected with `GH013`, `GITHUB PUSH PROTECTION`, and `GitHub Personal Access Token`. GitHub reported the probe commit `0308f7ce791ca7aa43f87fcf69c2eced402347ae` and `synthetic-push-protection.txt:1` in the push response.
 
-The remote stayed at harmless control commit `71ce48f5ee44c9b7e123be59208012a0c46f988a`. The disposable branch was deleted and its absence confirmed. No real credential was issued or used, no bypass was requested, and the fixture is not in the implementation history. The [redacted acceptance record](https://github.com/samueltauil/genomics-variant-analytics/blob/ae872112f936fc9e71621ab08f0fa7d70fb9c71e/CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10) includes the procedure, settings, commit IDs, and cleanup. [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) holds the record pending review.
+The remote stayed at harmless control commit `71ce48f5ee44c9b7e123be59208012a0c46f988a`. The disposable branch was deleted and its absence confirmed. No real credential was issued or used, no bypass was requested, and the fixture is not in the implementation history. The [redacted acceptance record](https://github.com/samueltauil/genomics-variant-analytics/blob/ae872112f936fc9e71621ab08f0fa7d70fb9c71e/CONTRIBUTING.md#secret-protection-acceptance-record-2026-09-10) includes the procedure, settings, commit IDs, and cleanup. [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12) holds the record and merged on 2026-09-10.
 
 Detection was verified in the push response, not a Security-tab alert. Public-repository user push protection may overlap; the test did not isolate those controls. Non-provider patterns and validity checks were disabled and were not tested.
 

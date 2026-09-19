@@ -257,9 +257,10 @@ class LandingScanTests(unittest.TestCase):
 
 
 class TransferFailureTests(unittest.TestCase):
-    """Task 2.3: failure is declared against a manifest's expected size, never inferred from stability."""
+    """Task 2.3: failures require an authoritative, generation-bound signal."""
 
     MANIFEST = "{run_id}/transfer-manifest.json"
+    FAILURE_MARKER = "{run_id}/transfer-failed.json"
     REACHED = 1e-6
     UNREACHED = 3600
 
@@ -288,9 +289,35 @@ class TransferFailureTests(unittest.TestCase):
         path.write_text(json.dumps(document))
         return path
 
+    def write_failure_marker(self, paths, run_id="SYN-RUN-001"):
+        entries = []
+        for path, reason in paths.items():
+            candidate = self.root / path
+            if candidate.exists():
+                metadata = candidate.stat()
+                size_bytes, modified_ns = metadata.st_size, metadata.st_mtime_ns
+            else:
+                size_bytes, modified_ns = None, None
+            entries.append({
+                "path": path, "reason": reason,
+                "size_bytes": size_bytes, "modified_ns": modified_ns,
+            })
+        marker = self.root / self.FAILURE_MARKER.format(run_id=run_id)
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(json.dumps({
+            "run_id": run_id, "status": "failed", "files": entries,
+        }))
+        newest = max(
+            [self.root.joinpath(*path.split("/")).stat().st_mtime_ns
+             for path in paths if self.root.joinpath(*path.split("/")).exists()]
+            or [marker.stat().st_mtime_ns]
+        )
+        os.utime(marker, ns=(newest + 1_000_000, newest + 1_000_000))
+        return marker
+
     def scan(self, stall_seconds=REACHED):
         return scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST,
-                         stall_seconds=stall_seconds)
+                         stall_seconds=stall_seconds, failure_marker=self.FAILURE_MARKER)
 
     def record(self, report, relative):
         return next(entry for entry in report["files"] if entry["path"] == relative)
@@ -299,10 +326,11 @@ class TransferFailureTests(unittest.TestCase):
         self.declare({self.first: 200})
         self.write(self.first, 50)
         self.assertEqual(self.record(self.scan(), self.first)["state"], "arriving")
+        self.write_failure_marker({self.first: "sender-aborted"})
         report = self.scan()
         record = self.record(report, self.first)
         self.assertEqual(record["state"], "failed")
-        self.assertEqual(record["failure_reason"], "incomplete-transfer")
+        self.assertEqual(record["failure_reason"], "sender-aborted")
         self.assertEqual(record["declared_size_bytes"], 200)
         self.assertEqual(record["run_id"], "SYN-RUN-001")
         self.assertEqual(record["sample_id"], "SYN-SAMPLE-001")
@@ -320,9 +348,9 @@ class TransferFailureTests(unittest.TestCase):
         self.write(self.first, 50)
         self.write(self.second, 120)
         first_report = self.scan()
-        self.scan()
+        self.write_failure_marker({self.first: "sender-aborted"})
         failed = self.record(self.scan(), self.first)
-        self.assertEqual((failed["state"], failed["failure_reason"]), ("failed", "incomplete-transfer"))
+        self.assertEqual((failed["state"], failed["failure_reason"]), ("failed", "sender-aborted"))
         self.assertEqual(self.record(self.scan(), self.second)["state"], "complete")
 
         self.write(self.first, 200)
@@ -341,10 +369,10 @@ class TransferFailureTests(unittest.TestCase):
 
     def test_declared_file_that_never_arrives_is_failed_with_its_identifiers(self):
         self.declare({self.first: 200})
-        self.scan()
+        self.write_failure_marker({self.first: "transfer-session-aborted"})
         record = self.record(self.scan(), self.first)
         self.assertEqual(record["state"], "failed")
-        self.assertEqual(record["failure_reason"], "missing-transfer")
+        self.assertEqual(record["failure_reason"], "transfer-session-aborted")
         self.assertEqual(record["run_id"], "SYN-RUN-001")
         self.assertEqual(record["sample_id"], "SYN-SAMPLE-001")
         self.assertFalse(record["present"])
@@ -396,10 +424,10 @@ class TransferFailureTests(unittest.TestCase):
         report = self.scan()
         self.assertIn("exceeds", report["manifest_errors"]["SYN-RUN-001"])
 
-    def test_manifest_requires_a_stall_deadline_and_a_run_template(self):
+    def test_manifest_requires_a_run_template_but_not_a_failure_deadline(self):
         self.declare({self.first: 200})
-        with self.assertRaisesRegex(ValueError, "stall deadline"):
-            scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST)
+        report = scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST)
+        self.assertEqual(report["failure_detection"], "not-evaluated")
         for template in ("manifest.json", "{sample_id}/manifest.json", "{run_id}/{run_id}.json",
                          "{path}/manifest.json", "../{run_id}.json", "/{run_id}.json"):
             with self.subTest(template=template):
@@ -410,7 +438,7 @@ class TransferFailureTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Stall deadline"):
                     scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST,
                               stall_seconds=stall)
-        self.assertFalse(self.inventory.exists())
+        self.assertTrue(self.inventory.exists())
 
     def test_failure_policy_is_bound_to_the_inventory(self):
         self.declare({self.first: 200})
@@ -430,14 +458,64 @@ class TransferFailureTests(unittest.TestCase):
     def test_cli_forwards_transfer_manifest_and_stall_deadline(self):
         self.declare({self.first: 200})
         self.write(self.first, 50)
+        self.scan()
+        self.write_failure_marker({self.first: "terminal-failure"})
         command = [sys.executable, "-I", str(SCANNER), "--root", str(self.root),
                    "--inventory", str(self.inventory), "--transfer-manifest", self.MANIFEST,
-                   "--stall-seconds", "0.000001"]
+                   "--stall-seconds", "0.000001", "--failure-marker", self.FAILURE_MARKER]
         for _ in range(2):
             result = subprocess.run(command, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
-        self.assertEqual(self.record(report, self.first)["failure_reason"], "incomplete-transfer")
+        self.assertEqual(self.record(report, self.first)["failure_reason"], "terminal-failure")
+
+    def test_stable_short_file_is_not_failed_without_authoritative_signal(self):
+        self.declare({self.first: 200})
+        self.write(self.first, 50)
+        states = [self.record(self.scan(), self.first)["state"] for _ in range(3)]
+        self.assertEqual(states, ["arriving", "arriving", "arriving"])
+
+    def test_failure_persists_after_restart_and_retry_is_generation_bound(self):
+        self.declare({self.first: 200})
+        self.write(self.first, 50)
+        self.scan()
+        self.write_failure_marker({self.first: "network-reset"})
+        failed = self.record(self.scan(), self.first)
+        restarted = self.record(
+            scan_once(self.root, self.inventory, transfer_manifest=self.MANIFEST,
+                      stall_seconds=self.REACHED, failure_marker=self.FAILURE_MARKER),
+            self.first,
+        )
+        self.assertEqual(restarted["state"], "failed")
+        self.assertEqual(restarted["failure_reason"], failed["failure_reason"])
+
+        self.write(self.first, 200)
+        retried = self.record(self.scan(), self.first)
+        self.assertEqual(retried["state"], "arriving")
+        self.assertIsNone(retried["failure_reason"])
+
+    def test_invalid_failure_marker_holds_run_without_claiming_failure(self):
+        self.declare({self.first: 50})
+        self.write(self.first, 50)
+        marker = self.root / "SYN-RUN-001" / "transfer-failed.json"
+        marker.write_text("{not json")
+        report = self.scan()
+        record = self.record(report, self.first)
+        self.assertEqual(record["state"], "arriving")
+        self.assertEqual(record["metadata_error"], "failure-marker-unavailable")
+        self.assertEqual(report["failed_count"], 0)
+        self.assertIn("SYN-RUN-001", report["failure_marker_errors"])
+
+    def test_stale_failure_marker_does_not_fail_retried_generation(self):
+        self.declare({self.first: 60})
+        self.write(self.first, 50)
+        self.scan()
+        self.write_failure_marker({self.first: "old-generation-failure"})
+        self.write(self.first, 60)
+        report = self.scan()
+        record = self.record(report, self.first)
+        self.assertEqual(record["state"], "arriving")
+        self.assertIsNone(record["failure_reason"])
 
 
 if __name__ == "__main__":

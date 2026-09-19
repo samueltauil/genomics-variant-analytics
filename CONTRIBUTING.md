@@ -42,7 +42,10 @@ allow an administrator fast-forward; no stronger direct-push guarantee is made.
 
 - One concern per pull request
 - Say what you verified and how — every task in this repository carries a verification condition, and reviews expect the same
-- Automated review runs first on workflow, container, manifest, and schema paths; a reference-build change without a version bump, or a schema change without a matching spec change, gets flagged
+- [Automated engineering review](docs/engineering-controls.md#automated-pull-request-review)
+  runs first on workflow, container, manifest, and schema paths; a
+  reference-build change without a version bump, or a schema change without a
+  matching spec change, gets flagged
 
 ## Data-hygiene check
 

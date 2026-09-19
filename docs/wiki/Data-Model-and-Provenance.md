@@ -1,10 +1,10 @@
 # Data Model and Provenance
 
-**Variant store specified; metadata lineage implemented locally as of 2026-09-10.** This page distinguishes the planned variant store from the synthetic SQLite lineage model. The metadata implementation is committed and pushed under [PR #12](https://github.com/samueltauil/genomics-variant-analytics/pull/12), not merged into `main` or deployed as a service. Read the linked specs before choosing ingestion libraries or physical table layouts.
+**Variant store and metadata lineage implemented locally as of 2026-09-19.** This page distinguishes the local synthetic Delta variant-store and metadata harnesses, both merged into `main`, from a deployed cloud service. Read the linked specs before choosing ingestion libraries or physical table layouts.
 
 ## Variant Records
 
-The current proposal uses the eight standard VCF core fields:
+The Bronze variant record, implemented locally in `scripts/variant_store.py`, uses the eight standard VCF core fields:
 
 | Field | Meaning |
 |---|---|
@@ -17,9 +17,9 @@ The current proposal uses the eight standard VCF core fields:
 | `FILTER` | Filter outcome |
 | `INFO` | Additional VCF annotations |
 
-`CHROM`, `POS`, `REF`, and `ALT` are mandatory under the proposed ingestion contract. The eight-field selection is a documented proposal, not a claim that the originating requirements enumerated these fields.
+`CHROM`, `POS`, `REF`, and `ALT` are mandatory; a record missing one of them is rejected rather than written. The eight-field selection is a documented accelerator contract, not a claim that the originating requirements enumerated these fields.
 
-The proposed context fields add sample, analysis, and provenance information:
+The context fields add sample, analysis, and provenance information:
 
 | Group | Fields |
 |---|---|
@@ -29,11 +29,11 @@ The proposed context fields add sample, analysis, and provenance information:
 | Reproducibility | `reference_build`, `pipeline_version` |
 | Source and ingestion | `source_file_uri`, `ingestion_timestamp` |
 
-Annotations may be absent according to the specification. Missing annotations must not be invented. Genotype and other context are not substitutes for retaining the original source artifact.
+Annotations may be absent according to the specification. Missing annotations are stored as null and must not be invented. Genotype and other context are not substitutes for retaining the original source artifact.
 
 ## Traceability
 
-The metadata model is intended to connect:
+The metadata model connects:
 
 ```text
 research subject -> sample -> sequencing run -> source file
@@ -47,7 +47,7 @@ research subject -> sample -> sequencing run -> source file
 
 Reference manifests and pipeline versions supply the additional context needed to interpret and reproduce the processing run. A result must resolve to its source file, processing version, and reference build rather than relying on a catalog entry alone.
 
-`research_subject_id` is not an authorization grant. The planned de-identified query surface must withhold identity-linked information according to the caller's tier. Do not assume pseudonymous identifiers make unrestricted access acceptable.
+`research_subject_id` is not an authorization grant. The local de-identified query surface withholds identity-linked information according to the caller's tier (see [Repository Guardrails](Repository-Guardrails)). Do not assume pseudonymous identifiers make unrestricted access acceptable.
 
 ## Local Metadata Implementation
 
@@ -69,11 +69,11 @@ New file artifacts require `storage_uri`, `analysis_stage`, `producing_run` and 
 
 `archive_artifact` marks metadata idempotently without deleting files or links. Variants still resolve to the same source entry with `archived: true`; both trace directions expose this flag in schema version 2. Version-1 databases migrate without invented file details; `backfill_file_metadata` supplies missing details once before file retrieval or archival.
 
-Task 6.5's clinical/research grants, audit and Delta/Purview integration remain pending. Trace responses declare `mode: local-only` and `azure_readiness: not-evaluated`. Development sources are the [metadata API](https://github.com/samueltauil/genomics-variant-analytics/blob/security/secret-push-protection/scripts/metadata_store.py), [synthetic tests](https://github.com/samueltauil/genomics-variant-analytics/blob/security/secret-push-protection/tests/test_metadata_store.py) and [usage guide](https://github.com/samueltauil/genomics-variant-analytics/blob/security/secret-push-protection/docs/metadata-store.md). Publication is not evidence of cloud readiness or governed access.
+Task 6.5 is now implemented locally: clinical and research attributes persist in separate tables behind independent grants, and a research-only principal reads research attributes with no clinical attribute or subject identifier returned. Twenty-five synthetic tests pass. Audit logging of metadata access is covered by the governance audit trail (see [Repository Guardrails](Repository-Guardrails)); Delta/Purview integration remains absent. Trace responses declare `mode: local-only` and `azure_readiness: not-evaluated`. Development sources are the [metadata API](https://github.com/samueltauil/genomics-variant-analytics/blob/main/scripts/metadata_store.py), [synthetic tests](https://github.com/samueltauil/genomics-variant-analytics/blob/main/tests/test_metadata_store.py) and [usage guide](https://github.com/samueltauil/genomics-variant-analytics/blob/main/docs/metadata-store.md). Publication is not evidence of cloud readiness or a deployed access-controlled service.
 
 ## Versioning and Retention
 
-- `pipeline_version` is intended to resolve to an immutable GitHub release and its build provenance. Release and attestation automation are not implemented yet.
+- `pipeline_version` resolves to the retained immutable GitHub release `v0.1.0-pipeline` for this synthetic pipeline commit, with a verified release attestation and locked assets. ACR image provenance/SBOM publication remains unverified until an independently reviewed Azure/ACR configuration is supplied.
 - Reference builds are to be versioned with checksums and immutable manifests. Reference genome bytes remain in object storage, not Git or release attachments.
 - Parsed Delta rows are additive to retained VCF and other file artifacts; the store does not replace those artifacts.
 - Reprocessing must remain traceable to the processing version and source artifact. A new run must not silently rewrite the evidence for an earlier result.
