@@ -3,11 +3,11 @@
 **Sequencer → governed variant store on Azure.** Keep the laboratory's SMB write path untouched while moving storage, compute, governance, and analytics into Azure, ending in a Delta-based variant store that is queryable and traceable to its source files.
 
 > **Status: partial implementation; no end-to-end demo.**
-> OpenSpec progress is **21/89 tasks complete**. Repository guardrails, a partial Azure storage/staging foundation, reference publication, a local landing inventory, a local metadata model, repository AI context, and presenter safeguards have evidence. A disposable Azure foundation was deployed and acceptance-tested on September 10-11, 2026, as recorded in the tracked [deployment plan](.azure/deployment-plan.md); this reconciliation did not verify that the environment still exists. Secondary analysis, the Delta variant store, and analytics remain specified only. See [Coverage](#coverage) for the exact presentation boundary.
+> OpenSpec progress is **65/89 tasks complete**. Repository guardrails, a partial Azure storage/staging foundation, reference publication, local landing, metadata, variant-store, governance, analytics and visualization harnesses, local instrumented KPI collection, repository AI context, and presenter safeguards have evidence. A disposable Azure foundation was deployed and acceptance-tested on September 10-11, 2026, as recorded in the tracked [deployment plan](.azure/deployment-plan.md); this reconciliation did not verify that the environment still exists. Secondary analysis remains specified only, and none of the local harnesses is a deployed end-to-end analytics platform. See [Coverage](#coverage) for the exact presentation boundary.
 
 ## What this is, and what it is not
 
-This is an **accelerator and reference architecture** assembled from validated genomics patterns and healthcare customer requirements.
+This is an **accelerator and reference architecture** assembled from validated genomics patterns and healthcare workload requirements.
 
 It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.
 
@@ -70,7 +70,7 @@ Ten capability specs live in [openspec/](openspec/). Each is a behavior contract
 
 ## Coverage
 
-Current coverage totals are **0 Demonstrated**, **7 Partially demonstrated**, and **3 Specified only**. No capability is complete enough to present as demonstrated, and no data-plane flow runs end to end. The partially demonstrated capabilities are SMB landing, object-storage staging, genomic metadata, reference management, governance building blocks, engineering workflow, and demo enablement. Secondary analysis, the Delta variant store, and analytics are specified only.
+Current coverage totals are **0 Demonstrated**, **9 Partially demonstrated**, and **1 Specified only**. No capability is complete enough to present as demonstrated, and no data-plane flow runs end to end. Secondary analysis is specified only. Variant-store and analytics behavior is demonstrated only through local SQLite and runtime-generated synthetic harnesses, not deployed Delta, notebook, SQL warehouse, or dashboard services.
 
 | State | Meaning for a customer conversation |
 |---|---|
@@ -78,7 +78,7 @@ Current coverage totals are **0 Demonstrated**, **7 Partially demonstrated**, an
 | Partially demonstrated | Show only the evidenced part; describe the rest as intent |
 | **Specified only** | Describe as architectural intent. Do not imply working software. |
 
-See the [capability coverage table](docs/coverage.md) for all ten statuses, evidence, limitations, and presenter guidance. Historical cloud acceptance is evidence only for the checks recorded in the repository; it is not proof of a currently deployed environment. Local evidence includes the [landing inventory](docs/landing-inventory.md), [metadata model](docs/metadata-store.md), staging log, reference publisher, data-hygiene tests, and [reference submission gate](docs/reference-submission.md). The task 4.3 gate is a local workflow-submission integration with a synthetic allocator and published-reference abstraction; it is not a deployed cloud pipeline.
+See the [capability coverage table](docs/coverage.md) for all ten statuses, evidence, limitations, and presenter guidance. Historical cloud acceptance is evidence only for the checks recorded in the repository; it is not proof of a currently deployed environment. Local evidence includes the [landing inventory](docs/landing-inventory.md), [metadata model](docs/metadata-store.md), staging log, reference publisher, [instrumented KPI collector](docs/accelerator-kpis.md), data-hygiene tests, and [reference submission gate](docs/reference-submission.md). The task 4.3 gate is a local workflow-submission integration with a synthetic allocator and published-reference abstraction; it is not a deployed cloud pipeline.
 
 ## Prerequisites
 
@@ -103,19 +103,14 @@ resource lookup or deployment when the required Azure preflight fails.
 
 ## Cost
 
-**Estimate status (dated September 16, 2026; `eastus2`): unverified.** No Azure
-pricing lookup or live billing observation was performed in this change, so the
-numeric per-delivery cost and idle daily cost are intentionally **not stated**.
-Do not substitute a remembered price or present the values below as a quote.
-
-| Figure | Value | Sizing basis and dominant resources |
-|---|---|---|
-| One delivery | Unverified; calculate before provisioning | The configured SSD provisioned-v2 share is 128 GiB, 3,000 IOPS and 200 MiB/s; the verification client is `Standard_D4s_v7`; optional Batch/HPC and analytics capacity are not sized here. |
-| Idle per day | Unverified; calculate before provisioning | The provisioned-v2 share continues to bill for provisioned capacity/IOPS/throughput; a running verification VM and any retained compute, analytics, or Managed Lustre capacity add idle cost. |
-
-The estimate must be regenerated for the chosen subscription, region, SKU,
-runtime, retention window, and delivery duration, then recorded with the
-pricing date and source. The repository contains no live pricing evidence.
+The [dated `eastus2` foundation-cost estimate](docs/cost-estimate.md) derives
+the current minimum modeled delivery cost (**$0.141**) and idle cost
+(**$0.601/day**) from the Bicep defaults and Microsoft retail price meters.
+It also states its material exclusions: private endpoints are not yet
+meter-resolved, while payload, operations, data transfer, processing,
+analytics, and alternate compute are not sized. Refresh and approve an
+environment-specific estimate before provisioning; these figures are not a
+quote or a full-architecture cost.
 
 ## Data
 

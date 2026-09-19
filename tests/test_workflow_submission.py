@@ -2,13 +2,15 @@ import copy
 import hashlib
 import io
 import json
+import sqlite3
 from pathlib import Path
 import unittest
 from unittest.mock import Mock
 
+from scripts.governance import GovernancePolicy
 from scripts.publish_reference import ReferenceZone, reference_path
 from scripts.validate_submission import unique_object, validate_request_compatibility
-from scripts.workflow_submission import submit_workflow
+from scripts.workflow_submission import submit_pipeline_workflow, submit_workflow
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -70,9 +72,24 @@ class WorkflowSubmissionTests(unittest.TestCase):
             }],
         }
         self.transport = MemoryTransport()
-        self.zone = ReferenceZone(self.transport, None, None)
-        self.zone.publish(self.genome, [artifact("reference.fa.gz")], "2026-09-15T00:00:00Z")
-        self.zone.publish(self.annotation, [artifact("genes.gtf.gz")], "2026-09-15T00:00:00Z")
+        self.connection = sqlite3.connect(":memory:")
+        self.connection.row_factory = sqlite3.Row
+        self.addCleanup(self.connection.close)
+        self.policy = GovernancePolicy(self.connection)
+        self.policy.grant_reference_role("SYN-REFERENCE-PUBLISHER", "reference_publisher")
+        self.policy.grant_reference_role("SYN-WORKFLOW-SUBMITTER", "reference_reader")
+        self.publisher = ReferenceZone(
+            self.transport, self.policy, "SYN-REFERENCE-PUBLISHER"
+        )
+        self.publisher.publish(
+            self.genome, [artifact("reference.fa.gz")], "2026-09-15T00:00:00Z"
+        )
+        self.publisher.publish(
+            self.annotation, [artifact("genes.gtf.gz")], "2026-09-15T00:00:00Z"
+        )
+        self.zone = ReferenceZone(
+            self.transport, self.policy, "SYN-WORKFLOW-SUBMITTER"
+        )
         self.allocate = Mock(return_value="SYN-ALLOCATION-001")
 
     def submit(self):
@@ -103,6 +120,29 @@ class WorkflowSubmissionTests(unittest.TestCase):
                 self.assertEqual(
                     pinned["uri"], self.transport.uri(reference_path(entry, pinned["filename"]))
                 )
+        reads = [
+            entry for entry in self.policy.reference_audit_entries()
+            if entry["operation"] == "read_reference_manifest"
+        ]
+        self.assertEqual(len(reads), 2)
+        self.assertTrue(all(
+            entry["principal_id"] == "SYN-WORKFLOW-SUBMITTER"
+            and entry["affected_data"]["outcome"] == "authorized"
+            for entry in reads
+        ))
+        self.assertEqual(
+            {
+                (entry["affected_data"]["entry_type"],
+                 entry["affected_data"]["entry_name"],
+                 entry["affected_data"]["version"])
+                for entry in reads
+            },
+            {
+                ("genome", "SYN-build", "v1"),
+                ("gene-annotation", "SYN-genes", "v1"),
+            },
+        )
+        self.assertTrue(self.policy.audit.verify())
 
     def test_incompatible_workflow_reference_pair_never_allocates(self):
         self.request["references"][0]["name"] = "SYN-other-build"
@@ -110,7 +150,9 @@ class WorkflowSubmissionTests(unittest.TestCase):
 
     def test_unavailable_exact_version_never_allocates_or_uses_available_successor(self):
         successor = {**self.genome, "version": "v2"}
-        self.zone.publish(successor, [artifact("reference.fa.gz")], "2026-09-15T01:00:00Z")
+        self.publisher.publish(
+            successor, [artifact("reference.fa.gz")], "2026-09-15T01:00:00Z"
+        )
         self.request["references"][0]["version"] = "missing-v1"
         self.request["reference_version"] = "missing-v1"
         self.compatibility["workflows"][0]["reference_sets"] = [
@@ -165,6 +207,49 @@ class WorkflowSubmissionTests(unittest.TestCase):
 
         self.assertEqual(len(resolved), 3)
         self.assertTrue(all(key[2] == "ensembl-116" for key in resolved))
+
+    def test_unattested_pipeline_image_is_rejected_before_compute(self):
+        evidence = {
+            "image": "registry.invalid/pipeline:v0.1.0",
+            "image_digest": "sha256:" + "a" * 64,
+            "pipeline_version": "v0.1.0",
+            "provenance": {
+                "repository": "owner/repo",
+                "commit": "a" * 40,
+                "workflow": "pipeline.yml",
+            },
+            "sbom": [{"name": "utility", "version": "1"}],
+            "dependencies": [{"name": "workflow", "commit": "a" * 40}],
+        }
+        with self.assertRaisesRegex(ValueError, "missing required"):
+            submit_pipeline_workflow(
+                self.request, self.compatibility, self.zone, evidence, self.allocate
+            )
+        self.allocate.assert_not_called()
+
+    def test_attested_pipeline_image_and_tracked_dependencies_reach_allocator(self):
+        evidence = {
+            "image": "registry.invalid/pipeline:v0.1.0",
+            "image_digest": "sha256:" + "a" * 64,
+            "pipeline_version": "v0.1.0",
+            "provenance": {
+                "repository": "owner/repo",
+                "commit": "a" * 40,
+                "workflow": "pipeline.yml",
+            },
+            "sbom": [
+                {"name": "aligner", "version": "1"},
+                {"name": "variant-caller", "version": "1"},
+            ],
+            "dependencies": [{"name": "workflow", "commit": "a" * 40}],
+        }
+        self.assertEqual(
+            submit_pipeline_workflow(
+                self.request, self.compatibility, self.zone, evidence, self.allocate
+            ),
+            "SYN-ALLOCATION-001",
+        )
+        self.assertIn("container", self.allocate.call_args.args[0])
 
 
 if __name__ == "__main__":

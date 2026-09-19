@@ -12,6 +12,7 @@ from scripts.validate_submission import (
     unique_object,
     validate_request_compatibility,
 )
+from scripts.supply_chain import verify_submission, verify_gh_attestations
 
 
 MANIFEST_FIELDS = {
@@ -104,3 +105,24 @@ def submit_workflow(request, compatibility, reference_zone, allocate):
     """Validate and pin the submission before invoking the compute allocator."""
     prepared = prepare_workflow_submission(request, compatibility, reference_zone)
     return allocate(prepared)
+
+
+def submit_pipeline_workflow(
+    request,
+    compatibility,
+    reference_zone,
+    supply_chain_submission,
+    allocate,
+    *,
+    verify_registry=False,
+):
+    """Validate references and image evidence before allocating compute."""
+    prepared = prepare_workflow_submission(request, compatibility, reference_zone)
+    evidence = verify_submission(supply_chain_submission)
+    if verify_registry:
+        verify_gh_attestations(
+            evidence["image"],
+            evidence["provenance"]["repository"],
+            evidence["provenance"]["workflow"],
+        )
+    return allocate({**prepared, "container": evidence})

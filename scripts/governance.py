@@ -206,6 +206,17 @@ class GovernancePolicy:
                     PRIMARY KEY (principal_id, reference_role)
                 )
             """)
+            self.connection.execute("""
+                CREATE TABLE IF NOT EXISTS governance_sharing_approvals (
+                    approval_id TEXT PRIMARY KEY,
+                    dataset TEXT NOT NULL,
+                    recipient TEXT NOT NULL,
+                    purpose TEXT NOT NULL,
+                    granted_by TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT
+                )
+            """)
         self.audit = AuditTrail(connection)
 
     def grant_tier(self, principal_id: str, access_tier: str) -> None:
@@ -280,11 +291,17 @@ class GovernancePolicy:
             (principal_id, reference_role),
         ).fetchone()
         if granted is None:
-            self.audit.record("reference_data", principal_id, f"deny:{operation}", subject)
+            self.audit.record(
+                "reference_data", principal_id, operation,
+                {**subject, "outcome": "denied"},
+            )
             raise AuthorizationError(
                 f"Principal {principal_id} is not authorized as {reference_role}."
             )
-        return self.audit.record("reference_data", principal_id, operation, subject)
+        return self.audit.record(
+            "reference_data", principal_id, operation,
+            {**subject, "outcome": "authorized"},
+        )
 
     def reference_audit_entries(self) -> list[dict[str, Any]]:
         return [entry for entry in self.audit.entries() if entry["event_type"] == "reference_data"]
@@ -409,4 +426,120 @@ class GovernancePolicy:
             "cross_workspace_transfer", principal_id, "transfer",
             {"source": source, "destination": destination, "dataset": dataset,
              "approval_id": approval_id},
+        )
+
+
+    def grant_sharing_approval(
+        self,
+        principal_id: str,
+        approval_id: str,
+        dataset: str,
+        recipient: str,
+        purpose: str,
+        expires_at: Any,
+    ) -> dict[str, Any]:
+        """Record an explicit external-sharing approval naming dataset, recipient, and purpose.
+
+        Granting the approval never authorizes the share itself; `share_externally`
+        still re-checks the approval before any data leaves the deployment.
+        """
+        synthetic_id(principal_id, "principal_id")
+        synthetic_id(approval_id, "approval_id")
+        synthetic_id(dataset, "dataset")
+        synthetic_id(recipient, "recipient")
+        if not isinstance(purpose, str) or not purpose.strip():
+            raise ValueError("purpose is required.")
+        if expires_at is None:
+            raise ValueError("expires_at is required.")
+        expires = _timestamp(expires_at)
+        with self.connection:
+            try:
+                self.connection.execute(
+                    """INSERT INTO governance_sharing_approvals
+                       (approval_id, dataset, recipient, purpose, granted_by, expires_at)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
+                    (approval_id, dataset, recipient, purpose, principal_id, expires),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError(f"Sharing approval {approval_id} already exists.") from exc
+        return self.audit.record(
+            "external_sharing_approval",
+            principal_id,
+            "grant_approval",
+            {
+                "approval_id": approval_id,
+                "dataset": dataset,
+                "recipient": recipient,
+                "purpose": purpose,
+                "expires_at": expires,
+            },
+        )
+
+    def share_externally(
+        self,
+        principal_id: str,
+        approval_id: str | None,
+        dataset: str,
+        recipient: str,
+        purpose: str,
+        as_of: Any = None,
+    ) -> dict[str, Any]:
+        """Gate an external share on an explicit, matching, unexpired, unused approval.
+
+        Read access to the variant store or cohort analytics tiers is
+        never sufficient here: a matching approval row is always required,
+        regardless of any tier grant the principal holds. Both the denial
+        and the approved execution are recorded in the audit trail.
+        """
+        synthetic_id(principal_id, "principal_id")
+        subject = {
+            "approval_id": approval_id,
+            "dataset": dataset,
+            "recipient": recipient,
+            "purpose": purpose,
+        }
+        check_time = datetime.fromisoformat(_timestamp(as_of).replace("Z", "+00:00"))
+        row = None
+        if approval_id:
+            row = self.connection.execute(
+                "SELECT * FROM governance_sharing_approvals WHERE approval_id = ?",
+                (approval_id,),
+            ).fetchone()
+        expired = False
+        if row is not None:
+            expires_at = datetime.fromisoformat(row["expires_at"].replace("Z", "+00:00"))
+            expired = expires_at <= check_time
+        valid = (
+            row is not None
+            and row["dataset"] == dataset
+            and row["recipient"] == recipient
+            and row["purpose"] == purpose
+            and row["used_at"] is None
+            and not expired
+        )
+        if not valid:
+            self.audit.record(
+                "external_sharing", principal_id, "deny:share_externally", subject
+            )
+            raise AuthorizationError(
+                "External sharing requires a matching, unexpired, unused approval "
+                "identifying the dataset, recipient, and purpose."
+            )
+        used_at = _timestamp(as_of)
+        with self.connection:
+            result = self.connection.execute(
+                """UPDATE governance_sharing_approvals SET used_at = ?
+                   WHERE approval_id = ? AND used_at IS NULL""",
+                (used_at, approval_id),
+            )
+        if result.rowcount != 1:
+            self.audit.record(
+                "external_sharing", principal_id, "deny:share_externally", subject
+            )
+            raise AuthorizationError("External sharing approval was already used.")
+        return self.audit.record(
+            "external_sharing",
+            principal_id,
+            "share_externally",
+            {**subject, "granted_by": row["granted_by"]},
         )

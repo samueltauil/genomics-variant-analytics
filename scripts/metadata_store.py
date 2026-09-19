@@ -321,6 +321,25 @@ class MetadataStore:
         )
         return subject["parent_id"]
 
+    def samples_for_sequencing_run(self, sequencing_run_id):
+        """Resolve the sample a sequencing run belongs to, for run-scoped queries.
+
+        This is structural lineage (which sample produced a run), not subject
+        identity, so it is available without a subject-linkage grant.
+        """
+        synthetic_id(sequencing_run_id)
+        run = self._connection.execute(
+            "SELECT kind FROM entities WHERE entity_id = ?", (sequencing_run_id,)
+        ).fetchone()
+        if run is None or run["kind"] != "sequencing_run":
+            raise ValueError(f"No sequencing run with identifier: {sequencing_run_id}")
+        rows = self._connection.execute("""
+            SELECT parent_id FROM links
+            JOIN entities ON entities.entity_id = links.parent_id
+            WHERE child_id = ? AND entities.kind = 'sample'
+        """, (sequencing_run_id,)).fetchall()
+        return [row["parent_id"] for row in rows]
+
     def grant_tier(self, principal_id, access_tier):
         self.governance.grant_tier(principal_id, access_tier)
 
@@ -453,6 +472,34 @@ class MetadataStore:
             raise ValueError("Artifact is missing or requires legacy file-metadata backfill.")
         return {**dict(artifact), "archived": bool(artifact["archived"])}
 
+    def find_artifact_by_uri(self, storage_uri):
+        """Resolve a file artifact by its canonical storage URI."""
+        location = text(storage_uri, "storage_uri")
+        artifact = self._connection.execute("""
+            SELECT entities.entity_id, entities.kind, file_metadata.storage_uri,
+                   file_metadata.analysis_stage, file_metadata.producing_run,
+                   file_metadata.integrity_result, file_metadata.sha256,
+                   file_metadata.archived, producing_runs.workflow_id,
+                   producing_runs.workflow_version
+            FROM file_metadata JOIN entities USING (entity_id)
+            JOIN producing_runs ON file_metadata.producing_run = producing_runs.run_id
+            WHERE file_metadata.storage_uri = ?
+        """, (location,)).fetchone()
+        if artifact is None:
+            raise ValueError(f"No file artifact is registered for storage URI: {location}")
+        return {**dict(artifact), "archived": bool(artifact["archived"])}
+
+    def get_pipeline_run(self, run_id):
+        """Return workflow metadata for a pipeline run or sequencing run."""
+        synthetic_id(run_id, "run_id")
+        row = self._connection.execute("""
+            SELECT run_id, sequencing_run_id, workflow_id, workflow_version
+            FROM producing_runs WHERE run_id = ?
+        """, (run_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"No producing run with identifier: {run_id}")
+        return dict(row)
+
     def archive_artifact(self, entity_id):
         synthetic_id(entity_id)
         with self._connection:
@@ -465,8 +512,22 @@ class MetadataStore:
     def trace_subject(self, subject_id):
         return self._trace(subject_id, "subject", "down")
 
+    def trace_sample(self, sample_id):
+        """Return the sample-to-file lineage without traversing to its subject."""
+        return self._trace(sample_id, "sample", "down")
+
     def trace_variant(self, variant_id):
         return self._trace(variant_id, "variant", "up")
+
+    def trace_artifact(self, artifact_id):
+        """Trace a VCF/BAM/CRAM/FASTQ artifact to its source sample chain."""
+        synthetic_id(artifact_id, "artifact_id")
+        row = self._connection.execute(
+            "SELECT kind FROM entities WHERE entity_id = ?", (artifact_id,)
+        ).fetchone()
+        if row is None or row["kind"] not in FILE_STAGES:
+            raise ValueError(f"No file artifact with identifier: {artifact_id}")
+        return self._trace(artifact_id, row["kind"], "up")
 
     def _trace(self, entity_id, expected_kind, direction):
         synthetic_id(entity_id)

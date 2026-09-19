@@ -37,6 +37,15 @@ param deployVerificationClient bool = true
 @description('Size of the verification client. Only unrestricted sizes in the target region will deploy.')
 param verificationClientSize string = 'Standard_D4s_v7'
 
+@description('Deploy the Storage Actions lifecycle task (task 3.5). Disable to skip Storage Actions entirely.')
+param deployStorageActions bool = true
+
+@description('ISO 8601 UTC instant computed by the deploy script from the age threshold; a Hot staged artifact last modified before this instant tiers to Cool.')
+param storageActionsTierBeforeDateUtc string = ''
+
+@description('ISO 8601 UTC instant, a few minutes in the future, when the one-shot verification run executes.')
+param storageActionsVerificationRunStartUtc string = ''
+
 // A utcNow() default would re-stamp every tagged resource on each run and make an unchanged
 // environment report drift, so the deployment timestamp stays in the deployment history instead.
 var tags = {
@@ -176,6 +185,19 @@ module staging 'modules/staging.bicep' = {
   }
 }
 
+module storageActions 'modules/storage-actions.bicep' = if (deployStorageActions) {
+  scope: environment
+  name: 'storage-actions-lifecycle'
+  params: {
+    location: location
+    tags: tags
+    name: 'sta'
+    lakeAccountName: lake.outputs.storageAccountName
+    lakeFilesystem: lake.outputs.filesystemName
+    tierBeforeDateUtc: storageActionsTierBeforeDateUtc
+    verificationRunStartUtc: storageActionsVerificationRunStartUtc
+  }
+}
 output resourceGroupName string = environment.name
 output location string = location
 output verificationClientName string = deployVerificationClient ? verificationClient!.outputs.clientName : ''
@@ -190,3 +212,5 @@ output referenceContainer string = lake.outputs.referenceContainerName
 output stagingIdentityClientId string = identities.outputs.stagingClientId
 output pipelineIdentityClientId string = identities.outputs.pipelineClientId
 output ingestionIdentityClientId string = identities.outputs.ingestionClientId
+output storageActionsTaskName string = deployStorageActions ? storageActions!.outputs.taskName : ''
+output storageActionsAssignmentName string = deployStorageActions ? storageActions!.outputs.assignmentName : ''

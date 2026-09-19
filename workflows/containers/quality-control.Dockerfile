@@ -1,0 +1,12 @@
+# Quality-control stage container. Pure Python; no bioinformatics tool
+# dependency for this stage.
+FROM python:3.12-slim
+
+WORKDIR /opt/pipeline
+COPY scripts/secondary_pipeline.py scripts/pipeline_provenance.py /opt/pipeline/scripts/
+COPY workflows/bin/quality_control.py /usr/local/bin/quality_control.py
+RUN chmod +x /usr/local/bin/quality_control.py \
+    && touch /opt/pipeline/scripts/__init__.py
+
+ENV PYTHONPATH=/opt/pipeline
+ENTRYPOINT ["quality_control.py"]

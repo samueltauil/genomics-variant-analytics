@@ -1,0 +1,57 @@
+name: Pipeline failure triage
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      failure_artifact:
+        description: Path to a downloaded pipeline-failure JSON array
+        required: false
+        default: artifacts/pipeline-failures.json
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pipeline-failure-triage
+  cancel-in-progress: false
+
+jobs:
+  triage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Download failure-provenance artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts
+          artifact_id="$(
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100" \
+              --jq '.artifacts[] | select(.name == "pipeline-failures" and .expired == false) | .id' \
+              | head -n 1
+          )"
+          if [ -n "$artifact_id" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" \
+              > artifacts/pipeline-failures.zip
+            unzip -q artifacts/pipeline-failures.zip -d artifacts
+          fi
+
+      - name: Triage reported failures
+        if: ${{ hashFiles('artifacts/pipeline-failures.json') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 -I scripts/triage_pipeline_failures.py
+          --input artifacts/pipeline-failures.json
+          --repository "$GITHUB_REPOSITORY"
+
+      - name: Report no failures
+        if: ${{ hashFiles('artifacts/pipeline-failures.json') == '' }}
+        run: echo "No pipeline-failures artifact was available; no issue was created."

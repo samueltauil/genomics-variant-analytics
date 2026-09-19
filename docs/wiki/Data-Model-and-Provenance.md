@@ -73,7 +73,7 @@ Task 6.5's clinical/research grants, audit and Delta/Purview integration remain 
 
 ## Versioning and Retention
 
-- `pipeline_version` is intended to resolve to an immutable GitHub release and its build provenance. Release and attestation automation are not implemented yet.
+- `pipeline_version` is intended to resolve to an immutable GitHub release and its build provenance. The repository now contains the protected-release, ACR build, provenance/SBOM attestation, and pre-allocation verification workflows; live release publication and registry verification remain unverified until an independently reviewed Azure/ACR configuration is supplied.
 - Reference builds are to be versioned with checksums and immutable manifests. Reference genome bytes remain in object storage, not Git or release attachments.
 - Parsed Delta rows are additive to retained VCF and other file artifacts; the store does not replace those artifacts.
 - Reprocessing must remain traceable to the processing version and source artifact. A new run must not silently rewrite the evidence for an earlier result.
