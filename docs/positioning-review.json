@@ -220,7 +220,7 @@
     },
     {
       "path": "docs/demo-runbook.md",
-      "line": 254,
+      "line": 256,
       "boundary": "released-blueprint",
       "rule": "released-offering",
       "text": "validated patterns. Do not say it is a released Microsoft blueprint, supported",
@@ -228,7 +228,7 @@
     },
     {
       "path": "docs/demo-runbook.md",
-      "line": 255,
+      "line": 257,
       "boundary": "compliance",
       "rule": "automatic-compliance",
       "text": "product, compliance outcome, confirmed customer deployment, clinical decision",

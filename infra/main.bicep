@@ -40,6 +40,9 @@ param verificationClientSize string = 'Standard_D4s_v7'
 @description('Deploy the Storage Actions lifecycle task (task 3.5). Disable to skip Storage Actions entirely.')
 param deployStorageActions bool = true
 
+@description('Deploy the Azure Container Registry used for release pipeline images and attestations.')
+param deployContainerRegistry bool = true
+
 @description('ISO 8601 UTC instant computed by the deploy script from the age threshold; a Hot staged artifact last modified before this instant tiers to Cool.')
 param storageActionsTierBeforeDateUtc string = ''
 
@@ -198,6 +201,18 @@ module storageActions 'modules/storage-actions.bicep' = if (deployStorageActions
     verificationRunStartUtc: storageActionsVerificationRunStartUtc
   }
 }
+
+module containerRegistry 'modules/container-registry.bicep' = if (deployContainerRegistry) {
+  scope: environment
+  name: 'pipeline-container-registry'
+  params: {
+    location: location
+    tags: tags
+    name: 'acrgen${suffix}'
+    pipelinePrincipalId: identities.outputs.pipelinePrincipalId
+  }
+}
+
 output resourceGroupName string = environment.name
 output location string = location
 output verificationClientName string = deployVerificationClient ? verificationClient!.outputs.clientName : ''
@@ -214,3 +229,5 @@ output pipelineIdentityClientId string = identities.outputs.pipelineClientId
 output ingestionIdentityClientId string = identities.outputs.ingestionClientId
 output storageActionsTaskName string = deployStorageActions ? storageActions!.outputs.taskName : ''
 output storageActionsAssignmentName string = deployStorageActions ? storageActions!.outputs.assignmentName : ''
+output containerRegistryName string = deployContainerRegistry ? containerRegistry!.outputs.name : ''
+output containerRegistryLoginServer string = deployContainerRegistry ? containerRegistry!.outputs.loginServer : ''

@@ -85,7 +85,7 @@ def verify_gh_attestations(
     *,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> None:
-    for predicate in ("https://slsa.dev/provenance/v1", "https://spdx.dev/Document"):
+    for predicate in ("https://slsa.dev/provenance/v1", "https://cyclonedx.org/bom"):
         command = [
             "gh", "attestation", "verify", f"oci://{image}", "--repo", repository,
             "--bundle-from-oci", "--predicate-type", predicate,
