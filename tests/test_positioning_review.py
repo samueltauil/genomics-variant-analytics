@@ -66,6 +66,19 @@ class PositioningReviewTests(unittest.TestCase):
             generated.write_text("<p>Reference architecture.</p>", encoding="utf-8")
             self.assertEqual(discover_presenter_material(root), [generated])
 
+    def test_presenter_material_order_is_posix_path_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for relative in ("docs/Zeta.md", "docs/alpha.md", "README.md"):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("Reference architecture.", encoding="utf-8")
+            self.assertEqual(
+                [path.relative_to(root).as_posix()
+                 for path in discover_presenter_material(root)],
+                ["README.md", "docs/Zeta.md", "docs/alpha.md"],
+            )
+
     def test_explicit_limitations_are_not_false_positives(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

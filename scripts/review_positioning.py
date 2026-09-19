@@ -104,7 +104,7 @@ def discover_presenter_material(root: Path) -> list[Path]:
                 if path.is_file() and path.suffix.lower() in PRESENTER_SUFFIXES
             )
     paths.discard(root / POSITIONING_REPORT)
-    return sorted(paths)
+    return sorted(paths, key=lambda path: _relative(path, root))
 
 
 def validate_claim_register(root: Path) -> str:
