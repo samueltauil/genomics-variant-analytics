@@ -15,9 +15,12 @@ permissions:
   contents: read
   id-token: write
   attestations: write
+  packages: write
 
 jobs:
   build:
+    environment:
+      name: release-build
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -77,14 +80,14 @@ jobs:
           upload-artifact: false
 
       - name: Attest build provenance to ACR
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest@v4
         with:
           subject-name: ${{ env.ACR_LOGIN_SERVER }}/genomics-variant-pipeline
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
       - name: Attest SBOM to ACR
-        uses: actions/attest-sbom@v2
+        uses: actions/attest@v4
         with:
           subject-name: ${{ env.ACR_LOGIN_SERVER }}/genomics-variant-pipeline
           subject-digest: ${{ steps.build.outputs.digest }}

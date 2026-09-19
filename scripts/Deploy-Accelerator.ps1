@@ -42,6 +42,9 @@ param(
     [Parameter(HelpMessage = 'Deploy the Storage Actions lifecycle task (task 3.5). Disable to skip it entirely.')]
     [bool] $DeployStorageActions = $true,
 
+    [Parameter(HelpMessage = 'Deploy the Azure Container Registry used by the release workflow.')]
+    [bool] $DeployContainerRegistry = $true,
+
     [ValidateRange(0, 365)]
     [int] $StorageActionsTierAfterDays = 1
 )
@@ -222,6 +225,7 @@ $parameters = @(
     "landingProvisionedIops=$ShareIops"
     "landingProvisionedBandwidthMibps=$ShareBandwidthMibps"
     "deployStorageActions=$($DeployStorageActions.ToString().ToLowerInvariant())"
+    "deployContainerRegistry=$($DeployContainerRegistry.ToString().ToLowerInvariant())"
     "storageActionsTierBeforeDateUtc=$storageActionsTierBeforeDateUtc"
     "storageActionsVerificationRunStartUtc=$storageActionsVerificationRunStartUtc"
 )
@@ -379,6 +383,8 @@ $environment = [ordered]@{
     taxonomy          = $taxonomy
     storageActionsTask       = $outputs.storageActionsTaskName.value
     storageActionsAssignment = $outputs.storageActionsAssignmentName.value
+    containerRegistry        = $outputs.containerRegistryName.value
+    containerRegistryLoginServer = $outputs.containerRegistryLoginServer.value
     identities        = [ordered]@{
         ingestion = $outputs.ingestionIdentityClientId.value
         staging   = $outputs.stagingIdentityClientId.value
