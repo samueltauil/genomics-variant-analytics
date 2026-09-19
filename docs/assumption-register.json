@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "source": "openspec/changes/add-genomics-variant-accelerator/proposal.md#assumptions",
+  "policy": "An item remains an assumption unless reviewed_confirmation identifies an explicit reviewed source, reviewer, and date.",
+  "assumptions": [
+    {
+      "id": "variant-schema",
+      "proposal_text": "The exact eight-column variant schema. The study states eight VCF columns are required but does not enumerate them; specs use the standard VCF core (`CHROM`, `POS`, `ID`, `REF`, `ALT`, `QUAL`, `FILTER`, `INFO`) as the working set.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "7.7", "7.8"],
+      "implementation_evidence": ["scripts/variant_store.py", "tests/test_variant_store.py", "docs/variant-store.md"],
+      "coverage_capability": "variant-store/delta-variant-store",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "The exact 20-field contract is implemented in a local SQLite harness and tested, but no reviewed source confirms that the originating eight-column requirement meant this VCF core. The schema remains an accelerator assumption."
+    },
+    {
+      "id": "hereditary-cancer-demo",
+      "proposal_text": "The hereditary-cancer screening demo scenario and its query set.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["1.5", "9.1"],
+      "implementation_evidence": ["docs/demo-dataset.md", "scripts/analytics_query.py", "tests/test_analytics_query.py"],
+      "coverage_capability": "analytics/variant-query-and-visualization",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Synthetic dataset bindings and local query scenarios exist, but they do not validate hereditary-cancer screening as the confirmed demo scenario or as a clinical use case."
+    },
+    {
+      "id": "visualization-screens",
+      "proposal_text": "The specific visualization screens.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["9.5"],
+      "implementation_evidence": ["scripts/analytics_experience.py", "tests/test_analytics_experience.py", "docs/analytics-query.md"],
+      "coverage_capability": "analytics/variant-query-and-visualization",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Six local access-aware view models are implemented and tested, but the chosen screen set remains a proposed accelerator choice without reviewed external confirmation."
+    },
+    {
+      "id": "delta-layout",
+      "proposal_text": "Partitioning and optimization strategy for the Delta tables.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["7.10"],
+      "implementation_evidence": ["scripts/variant_store.py", "tests/test_variant_store.py", "docs/variant-store.md"],
+      "coverage_capability": "variant-store/delta-variant-store",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "The local harness records a clustering strategy and maintenance state, but SQLite does not execute Delta optimization and representative-volume validation has not confirmed the strategy."
+    },
+    {
+      "id": "performance-and-kpis",
+      "proposal_text": "Query-performance targets and the additional accelerator KPIs.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["9.6", "12.2"],
+      "implementation_evidence": ["scripts/analytics_experience.py", "tests/test_analytics_experience.py", "docs/analytics-query.md"],
+      "coverage_capability": "analytics/variant-query-and-visualization",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "A 1,000 ms local synthetic query target is measured and explicitly labelled an assumption. The end-to-end accelerator KPI task remains open and no production target is confirmed."
+    },
+    {
+      "id": "purview-and-analytics-services",
+      "proposal_text": "A full Microsoft Purview implementation, and the specific use of Databricks, Fabric, Azure ML, or AI Foundry.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["8.9", "9.2", "10.8"],
+      "implementation_evidence": ["docs/coverage.md", "docs/limitations.md"],
+      "coverage_capability": "governance/access-and-lineage",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Purview lineage, deployed Databricks or Fabric surfaces, Azure ML or AI Foundry, and the governed query server are not implemented. Service selection remains deployment configuration and an assumption."
+    },
+    {
+      "id": "personal-public-repository",
+      "proposal_text": "The demo repository living in a personal GitHub account, which determines whether environment protection rules require the repository to be public.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["10.2", "10.11"],
+      "implementation_evidence": ["docs/engineering-controls.md", "CONTRIBUTING.md"],
+      "coverage_capability": "platform/engineering-workflow",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Current repository evidence documents a personal public repository and tier substitutes, but that deployment choice is not a confirmed requirement for every accelerator deployment."
+    },
+    {
+      "id": "solution-engineer-audience",
+      "proposal_text": "The audience being Microsoft solution engineers running this as a demo. Whether it later becomes a blueprint reference is out of scope and not an intent of this change.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["11.16"],
+      "implementation_evidence": ["README.md", "docs/demo-runbook.md", "docs/coverage.md"],
+      "coverage_capability": "platform/demo-enablement",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Documentation is written for a solution-engineer demo, but the first-reader dry run remains open and no reviewed confirmation changes the proposed audience into a product commitment."
+    },
+    {
+      "id": "customer-attributions",
+      "proposal_text": "Customer attributions carried in earlier drafts of the source material, which remain unverified and are excluded from this repository.",
+      "status": "assumption",
+      "reviewed_confirmation": null,
+      "task_evidence": ["11.11", "12.4"],
+      "implementation_evidence": ["docs/claim-register.md", "scripts/review_positioning.py", "tests/test_positioning_review.py"],
+      "coverage_capability": "platform/demo-enablement",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "No cleared customer attribution is recorded. The automated review continues to prohibit customer deployment claims, so the earlier attributions remain unverified and excluded."
+    }
+  ]
+}

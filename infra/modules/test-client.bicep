@@ -57,6 +57,7 @@ resource client 'Microsoft.Compute/virtualMachines@2024-11-01' = {
       }
       osDisk: {
         createOption: 'FromImage'
+        diskSizeGB: 32
         managedDisk: {
           storageAccountType: osDiskType
         }

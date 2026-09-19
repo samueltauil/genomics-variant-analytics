@@ -1,0 +1,92 @@
+name: Pipeline container
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Immutable release tag to build"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      IMAGE_TAG: ${{ inputs.image_tag || github.ref_name }}
+    steps:
+      - name: Require a release tag and registry configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$IMAGE_TAG" == v* ]] || { echo "A v-prefixed release tag is required." >&2; exit 1; }
+          [[ -n "$ACR_LOGIN_SERVER" && -n "$ACR_NAME" ]] || {
+            echo "ACR_LOGIN_SERVER and ACR_NAME repository variables are required; no registry was provisioned." >&2
+            exit 1
+          }
+          [[ -n "${{ vars.AZURE_CLIENT_ID }}" && -n "${{ vars.AZURE_TENANT_ID }}" && -n "${{ vars.AZURE_SUBSCRIPTION_ID }}" ]] || {
+            echo "Azure OIDC repository variables are required; no credential fallback is allowed." >&2
+            exit 1
+          }
+
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Log in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to ACR without admin credentials
+        shell: bash
+        run: az acr login --name "$ACR_NAME"
+
+      - name: Build and push image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: containers/pipeline/Dockerfile
+          push: true
+          tags: ${{ env.ACR_LOGIN_SERVER }}/genomics-variant-pipeline:${{ env.IMAGE_TAG }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ env.IMAGE_TAG }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.ACR_LOGIN_SERVER }}/genomics-variant-pipeline@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+
+      - name: Attest build provenance to ACR
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.ACR_LOGIN_SERVER }}/genomics-variant-pipeline
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Attest SBOM to ACR
+        uses: actions/attest-sbom@v2
+        with:
+          subject-name: ${{ env.ACR_LOGIN_SERVER }}/genomics-variant-pipeline
+          subject-digest: ${{ steps.build.outputs.digest }}
+          sbom-path: sbom.cdx.json
+          push-to-registry: true

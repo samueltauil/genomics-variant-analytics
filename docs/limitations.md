@@ -156,6 +156,12 @@ attestations to ACR, verify them before compute allocation, and make
 If attestation publication or verification fails, reject the run rather than
 falling back to an unattested image.
 
+**Repository implementation status:** The container workflow and local
+pre-allocation verifier are implemented, but the public demo repository has no
+configured ACR endpoint or Azure federated identity. No ACR image or attestation
+is claimed as published until a separately authorized, low-cost acceptance
+provides those values.
+
 ### Immutable releases cannot be corrected in place
 
 **Classification:** Inherent to the platform.

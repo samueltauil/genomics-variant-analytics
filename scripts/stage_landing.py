@@ -14,7 +14,8 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 
 from scripts.scan_landing import (
-    DEFAULT_PATTERN, evaluate_inventory, local_path, read_transfer_manifests,
+    DEFAULT_PATTERN, evaluate_inventory, local_path, read_failure_markers,
+    read_transfer_manifests,
 )
 
 API_VERSION = "2022-11-02"
@@ -67,7 +68,8 @@ def list_share(account, share, token, directory=""):
 
 
 def scan_share(account, share, inventory, client_id, pattern=DEFAULT_PATTERN,
-               completion_marker=None, token=None, transfer_manifest=None, stall_seconds=None):
+               completion_marker=None, token=None, transfer_manifest=None, stall_seconds=None,
+               failure_marker=None):
     inventory = local_path(inventory)
     token = token or managed_identity_token(client_id)
     matcher = re.compile(pattern)
@@ -88,20 +90,27 @@ def scan_share(account, share, inventory, client_id, pattern=DEFAULT_PATTERN,
             None if parsed else "unrecognized-path",
         ))
 
+    def read_manifest(relative):
+        with _send("GET", "%s/%s" % (base, urllib.parse.quote(relative)), token) as response:
+            return response.read()
+
     declarations, manifest_errors = {}, {}
     if transfer_manifest is not None:
-        def read_manifest(relative):
-            with _send("GET", "%s/%s" % (base, urllib.parse.quote(relative)), token) as response:
-                return response.read()
-
         declarations, manifest_errors = read_transfer_manifests(
             read_manifest, transfer_manifest, observations,
+        )
+    failures, failure_marker_errors = {}, {}
+    if failure_marker is not None:
+        failures, failure_marker_errors = read_failure_markers(
+            read_manifest, failure_marker, observations,
         )
 
     return evaluate_inventory(
         observations, inventory, base, pattern, completion_marker, observed_at,
         mode="azure-files", transfer_manifest=transfer_manifest, stall_seconds=stall_seconds,
+        failure_marker=failure_marker, failures=failures,
         declarations=declarations, manifest_errors=manifest_errors,
+        failure_marker_errors=failure_marker_errors,
     )
 
 
@@ -115,12 +124,14 @@ def main():
     parser.add_argument("--completion-marker")
     parser.add_argument("--transfer-manifest")
     parser.add_argument("--stall-seconds", type=float)
+    parser.add_argument("--failure-marker")
     arguments = parser.parse_args()
 
     report = scan_share(
         arguments.account, arguments.share, arguments.inventory, arguments.client_id,
         arguments.pattern, arguments.completion_marker,
         transfer_manifest=arguments.transfer_manifest, stall_seconds=arguments.stall_seconds,
+        failure_marker=arguments.failure_marker,
     )
     print(json.dumps(report, indent=2))
 

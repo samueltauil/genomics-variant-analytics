@@ -78,6 +78,10 @@ def manifest_matcher(template):
     return re.compile("%s(?P<run_id>[^/]+)%s" % (re.escape(prefix), re.escape(suffix)))
 
 
+def failure_marker_matcher(template):
+    return manifest_matcher(template)
+
+
 def parse_transfer_manifest(payload, run_id, manifest_path):
     """Return the declared byte size of each file the named run promises to deliver."""
     document = json.loads(payload.decode("utf-8"))
@@ -111,6 +115,56 @@ def parse_transfer_manifest(payload, run_id, manifest_path):
     return declared
 
 
+def parse_failure_marker(payload, run_id, marker_path):
+    """Return generation-bound terminal transfer failures from an authoritative marker."""
+    document = json.loads(payload.decode("utf-8"))
+    if not isinstance(document, dict) or set(document) != {"run_id", "status", "files"}:
+        raise ValueError("Failure marker must be an object with exactly run_id, status and files.")
+    if document["run_id"] != run_id or document["status"] != "failed":
+        raise ValueError("Failure marker must identify its path run and have status failed.")
+    entries = document["files"]
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("Failure marker files must be a non-empty list.")
+    failures = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {
+            "path", "reason", "size_bytes", "modified_ns"
+        }:
+            raise ValueError(
+                "Each failure marker entry needs path, reason, size_bytes and modified_ns."
+            )
+        path, reason = entry["path"], entry["reason"]
+        size_bytes, modified_ns = entry["size_bytes"], entry["modified_ns"]
+        if not isinstance(path, str) or not isinstance(reason, str) or not reason:
+            raise ValueError("Failure marker path and reason must be non-empty text.")
+        if "\\" in path or ":" in path or path.startswith("/") or any(
+            part in {"", ".", ".."} for part in path.split("/")
+        ):
+            raise ValueError("Failure marker paths must be relative to the landing root.")
+        if path.split("/")[0] != run_id:
+            raise ValueError("A failure marker may only identify files of its own run.")
+        if path == marker_path:
+            raise ValueError("A failure marker cannot identify itself.")
+        if (
+            size_bytes is not None
+            and (isinstance(size_bytes, bool) or not isinstance(size_bytes, int) or size_bytes < 0)
+        ):
+            raise ValueError("Failure marker size_bytes must be a non-negative integer or null.")
+        if (
+            modified_ns is not None
+            and (isinstance(modified_ns, bool) or not isinstance(modified_ns, int) or modified_ns < 0)
+        ):
+            raise ValueError("Failure marker modified_ns must be a non-negative integer or null.")
+        if (size_bytes is None) != (modified_ns is None):
+            raise ValueError("Failure marker size and modification fingerprints must both be null or set.")
+        if path in failures:
+            raise ValueError("Failure marker identifies %s more than once." % path)
+        failures[path] = {
+            "reason": reason, "size_bytes": size_bytes, "modified_ns": modified_ns,
+        }
+    return failures
+
+
 def read_transfer_manifests(read_bytes, template, observations):
     """Resolve every observed transfer manifest, keeping a rejected manifest from declaring anything."""
     matcher = manifest_matcher(template)
@@ -127,6 +181,29 @@ def read_transfer_manifests(read_bytes, template, observations):
         except (OSError, UnicodeDecodeError, ValueError) as error:
             errors[run_id] = str(error)
     return declarations, errors
+
+
+def read_failure_markers(read_bytes, template, observations):
+    """Resolve authoritative terminal-failure markers without accepting stale generations."""
+    matcher = failure_marker_matcher(template)
+    failures, errors = {}, {}
+    for relative, _, _, size_bytes, modified_ns, *_ in observations:
+        match = matcher.fullmatch(relative)
+        if not match:
+            continue
+        run_id = match.group("run_id")
+        try:
+            if size_bytes > MANIFEST_MAX_BYTES:
+                raise ValueError("Failure marker exceeds %d bytes." % MANIFEST_MAX_BYTES)
+            failures.update({
+                path: dict(details, marker_modified_ns=modified_ns)
+                for path, details in parse_failure_marker(
+                    read_bytes(relative), run_id, relative
+                ).items()
+            })
+        except (OSError, UnicodeDecodeError, ValueError) as error:
+            errors[run_id] = str(error)
+    return failures, errors
 
 
 def elapsed_seconds(since, observed_at):
@@ -149,7 +226,7 @@ def available_for_staging(report):
 
 
 def scan_once(root, inventory, pattern=DEFAULT_PATTERN, completion_marker=None,
-              transfer_manifest=None, stall_seconds=None):
+              transfer_manifest=None, stall_seconds=None, failure_marker=None):
     root = local_path(root)
     inventory = local_path(inventory)
     if not root.is_dir():
@@ -163,6 +240,8 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN, completion_marker=None,
         marker_path(completion_marker, {"run_id": "run", "sample_id": "sample", "path": "file"})
     if transfer_manifest is not None:
         manifest_matcher(transfer_manifest)
+    if failure_marker is not None:
+        failure_marker_matcher(failure_marker)
     observed_at = datetime.now(timezone.utc).isoformat()
     observations = []
 
@@ -196,27 +275,35 @@ def scan_once(root, inventory, pattern=DEFAULT_PATTERN, completion_marker=None,
         declarations, manifest_errors = read_transfer_manifests(
             lambda relative: (root / relative).read_bytes(), transfer_manifest, observations,
         )
+    failures, failure_marker_errors = {}, {}
+    if failure_marker is not None:
+        failures, failure_marker_errors = read_failure_markers(
+            lambda relative: (root / relative).read_bytes(), failure_marker, observations,
+        )
 
     return evaluate_inventory(
         observations, inventory, str(root), pattern, completion_marker, observed_at,
         transfer_manifest=transfer_manifest, stall_seconds=stall_seconds,
+        failure_marker=failure_marker, failures=failures,
         declarations=declarations, manifest_errors=manifest_errors,
+        failure_marker_errors=failure_marker_errors,
     )
 
 
 def evaluate_inventory(observations, inventory, source_key, pattern, completion_marker,
                        observed_at, mode="local-only", transfer_manifest=None,
-                       stall_seconds=None, declarations=None, manifest_errors=None):
+                       stall_seconds=None, failure_marker=None, failures=None,
+                       declarations=None, manifest_errors=None, failure_marker_errors=None):
     """Apply the completeness and failure rules to observations from any landing-zone source."""
     if stall_seconds is not None and (
         isinstance(stall_seconds, bool) or not isinstance(stall_seconds, (int, float))
         or not math.isfinite(stall_seconds) or stall_seconds <= 0
     ):
         raise ValueError("Stall deadline must be finite and positive.")
-    if transfer_manifest is not None and stall_seconds is None:
-        raise ValueError("A transfer manifest requires a stall deadline before failure is declared.")
     declarations = dict(declarations or {})
     manifest_errors = dict(manifest_errors or {})
+    failures = dict(failures or {})
+    failure_marker_errors = dict(failure_marker_errors or {})
     connection = sqlite3.connect(inventory)
     connection.row_factory = sqlite3.Row
     try:
@@ -224,17 +311,23 @@ def evaluate_inventory(observations, inventory, source_key, pattern, completion_
             connection.execute("CREATE TABLE IF NOT EXISTS source (root TEXT PRIMARY KEY, pattern TEXT NOT NULL)")
             add_columns(connection, "source", [
                 ("completion_marker", "TEXT"), ("transfer_manifest", "TEXT"), ("stall_seconds", "REAL"),
+                ("failure_marker", "TEXT"),
             ])
-            configuration = (source_key, pattern, completion_marker, transfer_manifest, stall_seconds)
+            configuration = (
+                source_key, pattern, completion_marker, transfer_manifest, stall_seconds, failure_marker
+            )
             binding = connection.execute(
-                "SELECT root, pattern, completion_marker, transfer_manifest, stall_seconds FROM source"
+                "SELECT root, pattern, completion_marker, transfer_manifest, stall_seconds, failure_marker "
+                "FROM source"
             ).fetchall()
             if binding and [tuple(row) for row in binding] != [configuration]:
                 raise ValueError(
                     "Inventory is already bound to a different root, path pattern, completion marker, "
                     "transfer manifest or stall deadline."
                 )
-            connection.execute("INSERT OR IGNORE INTO source VALUES (?, ?, ?, ?, ?)", configuration)
+            connection.execute(
+                "INSERT OR IGNORE INTO source VALUES (?, ?, ?, ?, ?, ?)", configuration
+            )
             connection.execute("""
                 CREATE TABLE IF NOT EXISTS files (
                     path TEXT PRIMARY KEY, run_id TEXT, sample_id TEXT,
@@ -275,18 +368,30 @@ def evaluate_inventory(observations, inventory, source_key, pattern, completion_
                     and prior["size_bytes"] == size_bytes and prior["modified_ns"] == modified_ns
                 )
                 unchanged_since = prior["unchanged_since"] if unchanged and prior["unchanged_since"] else observed_at
-                stalled = stall_seconds is not None and elapsed_seconds(unchanged_since, observed_at) >= stall_seconds
                 declared = declarations.get(relative)
                 marker = by_path.get(markers.get(relative))
                 marked = marker is not None and marker[4] >= modified_ns
+                failure = failures.get(relative)
+                failure_matches = failure is not None and (
+                    failure["marker_modified_ns"] >= modified_ns and (
+                        failure["size_bytes"] is None
+                    or (
+                        failure["size_bytes"] == size_bytes
+                        and failure["modified_ns"] == modified_ns
+                    )
+                    )
+                )
                 state, failure_reason = "arriving", None
                 if metadata_error is not None:
                     pass
+                elif run_id in failure_marker_errors:
+                    metadata_error = "failure-marker-unavailable"
+                elif failure_matches:
+                    state, failure_reason = "failed", failure["reason"]
                 elif declared is not None and size_bytes > declared:
                     state, failure_reason = "failed", "size-exceeds-declared"
                 elif declared is not None and size_bytes < declared:
-                    if stalled:
-                        state, failure_reason = "failed", "incomplete-transfer"
+                    pass
                 elif relative not in marker_paths and (unchanged or marked):
                     state = "complete"
                 evaluated.append((
@@ -295,14 +400,15 @@ def evaluate_inventory(observations, inventory, source_key, pattern, completion_
                 ))
 
             matcher = re.compile(pattern)
-            for path in sorted(set(declarations) - set(by_path)):
+            for path in sorted((set(declarations) | set(failures)) - set(by_path)):
                 prior = previous.get(path)
                 absent_before = prior is not None and not prior["present"]
                 unchanged_since = (
                     prior["unchanged_since"] if absent_before and prior["unchanged_since"] else observed_at
                 )
-                stalled = stall_seconds is not None and elapsed_seconds(unchanged_since, observed_at) >= stall_seconds
                 match = matcher.fullmatch(path)
+                failure = failures.get(path)
+                failure_matches = failure is not None and failure["size_bytes"] is None
                 evaluated.append((
                     path,
                     match.group("run_id") if match else path.split("/")[0],
@@ -311,9 +417,9 @@ def evaluate_inventory(observations, inventory, source_key, pattern, completion_
                     prior["modified_ns"] if prior else 0,
                     prior["arrival_timestamp"] if prior else observed_at,
                     observed_at, None,
-                    "failed" if stalled else "arriving",
-                    "missing-transfer" if stalled else None,
-                    unchanged_since, declarations[path], 0,
+                    "failed" if failure_matches else "arriving",
+                    failure["reason"] if failure_matches else None,
+                    unchanged_since, declarations.get(path), 0,
                 ))
 
             connection.execute("UPDATE files SET present = 0, state = 'arriving', failure_reason = NULL")
@@ -335,12 +441,15 @@ def evaluate_inventory(observations, inventory, source_key, pattern, completion_
         for record in records:
             record["present"] = bool(record["present"])
         return {
-            "schema_version": 3, "mode": mode, "observed_at": observed_at,
+            "schema_version": 4, "mode": mode, "observed_at": observed_at,
             "file_count": len(observations), "files": records,
             "completeness_evaluated": True,
-            "failure_detection": "declared-size" if transfer_manifest is not None else "not-evaluated",
+            "failure_detection": (
+                "authoritative-marker" if failure_marker is not None else "not-evaluated"
+            ),
             "stall_seconds": stall_seconds,
             "manifest_errors": manifest_errors,
+            "failure_marker_errors": failure_marker_errors,
             "failed_count": sum(1 for record in records if record["state"] == "failed"),
             "azure_readiness": "not-evaluated",
         }
@@ -349,7 +458,8 @@ def evaluate_inventory(observations, inventory, source_key, pattern, completion_
 
 
 def poll_inventory(root, inventory, pattern=DEFAULT_PATTERN, polls=1, interval_seconds=60,
-                   completion_marker=None, transfer_manifest=None, stall_seconds=None):
+                   completion_marker=None, transfer_manifest=None, stall_seconds=None,
+                   failure_marker=None):
     if isinstance(polls, bool) or not isinstance(polls, int) or polls < 1:
         raise ValueError("Poll count must be a positive integer.")
     if not math.isfinite(interval_seconds) or interval_seconds <= 0:
@@ -357,7 +467,10 @@ def poll_inventory(root, inventory, pattern=DEFAULT_PATTERN, polls=1, interval_s
     for poll_index in range(polls):
         if poll_index:
             time.sleep(interval_seconds)
-        yield scan_once(root, inventory, pattern, completion_marker, transfer_manifest, stall_seconds)
+        yield scan_once(
+            root, inventory, pattern, completion_marker, transfer_manifest, stall_seconds,
+            failure_marker,
+        )
 
 
 def main():
@@ -367,7 +480,8 @@ def main():
     parser.add_argument("--path-pattern", default=DEFAULT_PATTERN)
     parser.add_argument("--completion-marker", help="Root-relative vendor marker template, e.g. {run_id}/RTAComplete.txt")
     parser.add_argument("--transfer-manifest", help="Root-relative manifest template, e.g. {run_id}/transfer-manifest.json")
-    parser.add_argument("--stall-seconds", type=float, help="Seconds a short or absent declared file may stay unchanged before it is failed")
+    parser.add_argument("--stall-seconds", type=float, help="Polling deadline retained for manifest binding; it never declares failure")
+    parser.add_argument("--failure-marker", help="Root-relative authoritative terminal-failure marker template, e.g. {run_id}/transfer-failed.json")
     parser.add_argument("--polls", type=int, default=1)
     parser.add_argument("--interval-seconds", type=float, default=60)
     arguments = parser.parse_args()
@@ -376,6 +490,7 @@ def main():
             arguments.root, arguments.inventory, arguments.path_pattern,
             arguments.polls, arguments.interval_seconds,
             arguments.completion_marker, arguments.transfer_manifest, arguments.stall_seconds,
+            arguments.failure_marker,
         ):
             print(json.dumps(report), flush=True)
     except (OSError, ValueError, re.error, sqlite3.Error) as error:

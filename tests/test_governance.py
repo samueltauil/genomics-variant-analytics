@@ -102,5 +102,99 @@ class GovernanceTests(unittest.TestCase):
                 self.assertTrue(store.verify_audit())
 
 
+    def test_external_share_requires_matching_unexpired_unused_approval(self):
+        self.policy.grant_tier("SYN-SHARE-OPERATOR", "cohort_analytics")
+        self.policy.grant_tier("SYN-SHARE-OPERATOR", "variant_store")
+
+        # Read access alone never implies sharing permission.
+        with self.assertRaises(AuthorizationError):
+            self.policy.share_externally(
+                "SYN-SHARE-OPERATOR", None, "SYN-DATASET-COHORT-001",
+                "SYN-PARTNER-ORG-001", "synthetic research collaboration",
+            )
+
+        self.policy.grant_sharing_approval(
+            "SYN-GOVERNANCE-OFFICER", "SYN-APPROVAL-SHARE-001",
+            "SYN-DATASET-COHORT-001", "SYN-PARTNER-ORG-001",
+            "synthetic research collaboration",
+            expires_at="2999-01-01T00:00:00+00:00",
+        )
+
+        # Mismatched dataset is denied even with a real, unexpired approval id.
+        with self.assertRaises(AuthorizationError):
+            self.policy.share_externally(
+                "SYN-SHARE-OPERATOR", "SYN-APPROVAL-SHARE-001",
+                "SYN-DATASET-COHORT-999", "SYN-PARTNER-ORG-001",
+                "synthetic research collaboration",
+            )
+
+        # Mismatched recipient is denied.
+        with self.assertRaises(AuthorizationError):
+            self.policy.share_externally(
+                "SYN-SHARE-OPERATOR", "SYN-APPROVAL-SHARE-001",
+                "SYN-DATASET-COHORT-001", "SYN-OTHER-ORG-001",
+                "synthetic research collaboration",
+            )
+
+        # Mismatched purpose is denied.
+        with self.assertRaises(AuthorizationError):
+            self.policy.share_externally(
+                "SYN-SHARE-OPERATOR", "SYN-APPROVAL-SHARE-001",
+                "SYN-DATASET-COHORT-001", "SYN-PARTNER-ORG-001",
+                "unrelated purpose",
+            )
+
+        approved = self.policy.share_externally(
+            "SYN-SHARE-OPERATOR", "SYN-APPROVAL-SHARE-001",
+            "SYN-DATASET-COHORT-001", "SYN-PARTNER-ORG-001",
+            "synthetic research collaboration",
+        )
+        self.assertEqual(approved["operation"], "share_externally")
+        self.assertEqual(approved["affected_data"]["dataset"], "SYN-DATASET-COHORT-001")
+        self.assertEqual(approved["affected_data"]["recipient"], "SYN-PARTNER-ORG-001")
+        self.assertEqual(approved["affected_data"]["purpose"], "synthetic research collaboration")
+
+        # The same approval cannot be reused for a second share.
+        with self.assertRaises(AuthorizationError):
+            self.policy.share_externally(
+                "SYN-SHARE-OPERATOR", "SYN-APPROVAL-SHARE-001",
+                "SYN-DATASET-COHORT-001", "SYN-PARTNER-ORG-001",
+                "synthetic research collaboration",
+            )
+
+        denied_ops = [
+            entry["operation"] for entry in self.policy.audit.entries()
+            if entry["event_type"] == "external_sharing"
+            and entry["operation"] == "deny:share_externally"
+        ]
+        self.assertEqual(len(denied_ops), 5)
+        approved_ops = [
+            entry for entry in self.policy.audit.entries()
+            if entry["event_type"] == "external_sharing"
+            and entry["operation"] == "share_externally"
+        ]
+        self.assertEqual(len(approved_ops), 1)
+        self.assertTrue(self.policy.audit.verify())
+
+    def test_external_share_is_denied_after_approval_expires(self):
+        self.policy.grant_sharing_approval(
+            "SYN-GOVERNANCE-OFFICER", "SYN-APPROVAL-SHARE-002",
+            "SYN-DATASET-VARIANT-002", "SYN-PARTNER-ORG-002",
+            "synthetic collaboration study",
+            expires_at="2020-01-01T00:00:00+00:00",
+        )
+        with self.assertRaises(AuthorizationError):
+            self.policy.share_externally(
+                "SYN-SHARE-OPERATOR-2", "SYN-APPROVAL-SHARE-002",
+                "SYN-DATASET-VARIANT-002", "SYN-PARTNER-ORG-002",
+                "synthetic collaboration study",
+            )
+        denied = [
+            entry for entry in self.policy.audit.entries()
+            if entry["event_type"] == "external_sharing"
+            and entry["operation"] == "deny:share_externally"
+        ]
+        self.assertEqual(len(denied), 1)
+
 if __name__ == "__main__":
     unittest.main()

@@ -152,6 +152,14 @@ class StagingLog:
         ).fetchone()
         return dict(row) if row else None
 
+    def get_by_destination_uri(self, destination_uri):
+        """Resolve the landing record that produced a staged destination URI."""
+        destination_uri = _destination_uri(destination_uri)
+        row = self._connection.execute(
+            "SELECT * FROM staging WHERE destination_uri = ?", (destination_uri,)
+        ).fetchone()
+        return dict(row) if row else None
+
     def report(self):
         """Every staging outcome, including failures, for operator review."""
         return [

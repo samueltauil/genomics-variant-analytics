@@ -186,22 +186,28 @@ class ReferenceAuditTests(unittest.TestCase):
             self.publish(self.READER, HG19)
 
         allowed, denied = self.policy.reference_audit_entries()
-        for entry, principal, operation in (
-            (allowed, self.PUBLISHER, "publish_reference"),
-            (denied, self.READER, "deny:publish_reference"),
+        for audit_entry, principal, outcome in (
+            (allowed, self.PUBLISHER, "authorized"),
+            (denied, self.READER, "denied"),
         ):
-            with self.subTest(operation=operation):
-                self.assertEqual(entry["principal_id"], principal)
-                self.assertEqual(entry["operation"], operation)
-                self.assertEqual(entry["affected_data"]["entry_type"], "genome")
-                self.assertEqual(entry["affected_data"]["reference_role"], "reference_publisher")
-                self.assertTrue(entry["recorded_at"].endswith("Z"))
+            with self.subTest(outcome=outcome):
+                self.assertEqual(audit_entry["principal_id"], principal)
+                self.assertEqual(audit_entry["operation"], "publish_reference")
+                self.assertEqual(audit_entry["affected_data"]["outcome"], outcome)
+                self.assertEqual(audit_entry["affected_data"]["entry_type"], "genome")
+                self.assertEqual(audit_entry["affected_data"]["reference_role"],
+                                 "reference_publisher")
+                self.assertTrue(audit_entry["recorded_at"].endswith("Z"))
                 self.assertIsNotNone(
-                    datetime.fromisoformat(entry["recorded_at"].replace("Z", "+00:00")).tzinfo
+                    datetime.fromisoformat(
+                        audit_entry["recorded_at"].replace("Z", "+00:00")
+                    ).tzinfo
                 )
         self.assertEqual(allowed["affected_data"]["entry"], "genome/GRCh38/2026-09-11")
+        self.assertEqual(allowed["affected_data"]["entry_name"], "GRCh38")
         self.assertEqual(allowed["affected_data"]["version"], "2026-09-11")
         self.assertEqual(denied["affected_data"]["entry"], "genome/hg19/2026-09-11")
+        self.assertEqual(denied["affected_data"]["entry_name"], "hg19")
         self.assertEqual(denied["affected_data"]["version"], "2026-09-11")
         self.assertTrue(self.policy.audit.verify())
 
@@ -221,6 +227,13 @@ class ReferenceAuditTests(unittest.TestCase):
         self.assertEqual(operations, [
             "publish_reference", "read_reference_manifest", "list_reference_manifests",
         ])
+        reads = self.policy.reference_audit_entries()[1:]
+        self.assertTrue(all(
+            entry["affected_data"]["outcome"] == "authorized" for entry in reads
+        ))
+        self.assertEqual(reads[0]["affected_data"]["entry_type"], "genome")
+        self.assertEqual(reads[0]["affected_data"]["entry_name"], "GRCh38")
+        self.assertEqual(reads[0]["affected_data"]["version"], "2026-09-11")
 
     def test_a_publisher_grant_does_not_carry_read_access(self):
         self.publish(self.PUBLISHER)
@@ -231,7 +244,7 @@ class ReferenceAuditTests(unittest.TestCase):
                 HG19, [artifact("reference.fa.gz", b"synthetic")], "2026-09-11T00:00:00Z",
             )
         denials = [entry for entry in self.policy.reference_audit_entries()
-                   if entry["operation"].startswith("deny:")]
+                   if entry["affected_data"]["outcome"] == "denied"]
         self.assertEqual([entry["affected_data"]["reference_role"] for entry in denials],
                          ["reference_reader", "reference_publisher"])
 
@@ -239,7 +252,23 @@ class ReferenceAuditTests(unittest.TestCase):
         self.assertIsNone(self.zone(self.READER).get_manifest(GRCH38))
         entry = self.policy.reference_audit_entries()[-1]
         self.assertEqual(entry["operation"], "read_reference_manifest")
+        self.assertEqual(entry["affected_data"]["outcome"], "authorized")
         self.assertEqual(entry["affected_data"]["entry"], "genome/GRCh38/2026-09-11")
+
+    def test_reference_audit_entries_are_append_only_and_hash_chained(self):
+        self.publish(self.PUBLISHER)
+        self.zone(self.READER).get_manifest(GRCH38)
+
+        self.assertTrue(self.policy.audit.verify())
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "UPDATE governance_audit SET operation = 'tampered' WHERE event_id = 1"
+            )
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.connection.execute(
+                "DELETE FROM governance_audit WHERE event_id = 1"
+            )
+        self.assertTrue(self.policy.audit.verify())
 
     def test_a_governor_and_principal_must_be_supplied_together(self):
         for governor, principal in ((self.policy, None), (None, self.PUBLISHER)):

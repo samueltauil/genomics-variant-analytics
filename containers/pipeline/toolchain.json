@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "purpose": "synthetic accelerator container metadata",
+  "components": [
+    {
+      "name": "aligner",
+      "version": "synthetic-aligner-1.0.0",
+      "source_commit": "synthetic-placeholder"
+    },
+    {
+      "name": "variant-caller",
+      "version": "synthetic-variant-caller-1.0.0",
+      "source_commit": "synthetic-placeholder"
+    },
+    {
+      "name": "utility",
+      "version": "python-3.12",
+      "source_commit": "synthetic-placeholder"
+    }
+  ]
+}

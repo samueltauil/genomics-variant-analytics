@@ -1,0 +1,516 @@
+{
+  "schema_version": 1,
+  "review_date": "2026-09-19",
+  "reviewer": "automated repository positioning review",
+  "claim_register": "docs/claim-register.md",
+  "claim_register_sha256": "7a8501a1734810ca85108d8938236b36ca2741587f1fe54a29568acabd01306b",
+  "result": "pass",
+  "search_terms": [
+    "customer",
+    "production",
+    "deployed",
+    "blueprint",
+    "generally available",
+    "supported",
+    "compliant",
+    "HIPAA",
+    "GDPR",
+    "clinical",
+    "diagnoses",
+    "pathogenicity"
+  ],
+  "reviewed_files": [
+    "README.md",
+    "SUPPORT.md",
+    "docs/accelerator-kpis.md",
+    "docs/analytics-query.md",
+    "docs/claim-register.md",
+    "docs/cost-estimate.md",
+    "docs/coverage.md",
+    "docs/demo-dataset.md",
+    "docs/demo-runbook.md",
+    "docs/engineering-controls.md",
+    "docs/genomics-workload-context.md",
+    "docs/governance-local-controls.md",
+    "docs/landing-inventory.md",
+    "docs/limitations.md",
+    "docs/lineage.md",
+    "docs/mcp-server.md",
+    "docs/metadata-store.md",
+    "docs/reference-submission.md",
+    "docs/secondary-pipeline.md",
+    "docs/variant-store.md",
+    "docs/wiki/Architecture.md",
+    "docs/wiki/Data-Model-and-Provenance.md",
+    "docs/wiki/Demo-Readiness-and-Limitations.md",
+    "docs/wiki/Development-Guide.md",
+    "docs/wiki/Home.md",
+    "docs/wiki/Repository-Guardrails.md",
+    "docs/wiki/_Sidebar.md",
+    "infra/README.md"
+  ],
+  "flagged_matches": [
+    {
+      "path": "README.md",
+      "line": 12,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "README.md",
+      "line": 12,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "README.md",
+      "line": 12,
+      "boundary": "customer-reference",
+      "rule": "customer-attribution",
+      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "SUPPORT.md",
+      "line": 9,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "This accelerator is not a supported Microsoft offering, product, service, or",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "SUPPORT.md",
+      "line": 11,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "does not provide access to Microsoft product support.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/analytics-query.md",
+      "line": 126,
+      "boundary": "clinical-use",
+      "rule": "clinical-output",
+      "text": "“Exploratory AI-assisted analysis only; not a diagnosis, clinical",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 30,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "- \"Microsoft has a genomics accelerator\" — implies a released offering",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 31,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "- \"This is a Microsoft blueprint\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 32,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "- \"This is generally available\" / \"supported\" / \"productized\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 32,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "- \"This is generally available\" / \"supported\" / \"productized\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 34,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "**If asked directly whether this is a Microsoft product:** No. It is an accelerator assembled from patterns that are individually validated. There is no support commitment attached to it.",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 48,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "- \"This makes your genomic data compliant\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 49,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "- \"This is HIPAA compliant\" / \"GDPR compliant\" / any named-regulation compliance claim about the accelerator",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 49,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "- \"This is HIPAA compliant\" / \"GDPR compliant\" / any named-regulation compliance claim about the accelerator",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 50,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "- \"This handles the compliance side for you\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 66,
+      "boundary": "customer-reference",
+      "rule": "customer-attribution",
+      "text": "- \"These patterns are in production use across genomics customers\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 67,
+      "boundary": "customer-reference",
+      "rule": "customer-attribution",
+      "text": "- \"Customers use this accelerator in production\" or any similarly broad, unsupported deployment claim",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 85,
+      "boundary": "clinical-use",
+      "rule": "clinical-output",
+      "text": "- \"This supports clinical decision-making\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 86,
+      "boundary": "clinical-use",
+      "rule": "clinical-output",
+      "text": "- \"The AI interprets variants\" / \"diagnoses\" / \"determines pathogenicity\"",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 87,
+      "boundary": "clinical-use",
+      "rule": "clinical-output",
+      "text": "- Anything positioning assisted output as a clinical determination",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/claim-register.md",
+      "line": 100,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "- **Contextual searches:** Search the reviewed files for customer names and terms such as `customer`, `production`, `deployed`, `blueprint`, `generally available`, `supported`, `compliant`, `HIPAA`, `GDPR`, `clinical`, `diagnoses`, and `pathogenicity`. Inspect each match in context and record its disposition rather than treating a zero-match search as sufficient review.",
+      "disposition": "canonical claim-register guidance"
+    },
+    {
+      "path": "docs/demo-runbook.md",
+      "line": 254,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "validated patterns. Do not say it is a released Microsoft blueprint, supported",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/demo-runbook.md",
+      "line": 255,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "product, compliance outcome, confirmed customer deployment, clinical decision",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/limitations.md",
+      "line": 14,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "compliance solution. See [claim-register.md](claim-register.md) for the language",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/limitations.md",
+      "line": 379,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "**Limitation:** Deploying the accelerator does not make genomic data compliant",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/mcp-server.md",
+      "line": 19,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "not a released Microsoft product, supported offering, or confirmed",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/secondary-pipeline.md",
+      "line": 6,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "It is a demo solution accelerator artifact, not a Microsoft product, released",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/wiki/Demo-Readiness-and-Limitations.md",
+      "line": 66,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "Do not describe the accelerator as a released Microsoft blueprint, supported product, compliance solution, or confirmed end-to-end customer deployment. Do not include unverified customer names. Assisted exploration is a governed, exploratory research aid, not diagnosis, pathogenicity determination, or clinical decision-making.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/wiki/Demo-Readiness-and-Limitations.md",
+      "line": 66,
+      "boundary": "compliance",
+      "rule": "automatic-compliance",
+      "text": "Do not describe the accelerator as a released Microsoft blueprint, supported product, compliance solution, or confirmed end-to-end customer deployment. Do not include unverified customer names. Assisted exploration is a governed, exploratory research aid, not diagnosis, pathogenicity determination, or clinical decision-making.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/wiki/Demo-Readiness-and-Limitations.md",
+      "line": 66,
+      "boundary": "customer-reference",
+      "rule": "customer-attribution",
+      "text": "Do not describe the accelerator as a released Microsoft blueprint, supported product, compliance solution, or confirmed end-to-end customer deployment. Do not include unverified customer names. Assisted exploration is a governed, exploratory research aid, not diagnosis, pathogenicity determination, or clinical decision-making.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/wiki/Home.md",
+      "line": 7,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "This is a reference architecture and demo accelerator, not a released Microsoft blueprint, a supported product, or a clinical decision system. No compliance certification or confirmed customer deployment is claimed.",
+      "disposition": "explicitly negated or prohibited"
+    }
+  ],
+  "assumption_cross_check": [
+    {
+      "id": "variant-schema",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "7.1",
+          "status": "complete"
+        },
+        {
+          "task": "7.2",
+          "status": "complete"
+        },
+        {
+          "task": "7.3",
+          "status": "complete"
+        },
+        {
+          "task": "7.4",
+          "status": "complete"
+        },
+        {
+          "task": "7.5",
+          "status": "complete"
+        },
+        {
+          "task": "7.6",
+          "status": "complete"
+        },
+        {
+          "task": "7.7",
+          "status": "complete"
+        },
+        {
+          "task": "7.8",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "scripts/variant_store.py",
+        "tests/test_variant_store.py",
+        "docs/variant-store.md"
+      ],
+      "coverage_capability": "variant-store/delta-variant-store",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "The exact 20-field contract is implemented in a local SQLite harness and tested, but no reviewed source confirms that the originating eight-column requirement meant this VCF core. The schema remains an accelerator assumption."
+    },
+    {
+      "id": "hereditary-cancer-demo",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "1.5",
+          "status": "complete"
+        },
+        {
+          "task": "9.1",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "docs/demo-dataset.md",
+        "scripts/analytics_query.py",
+        "tests/test_analytics_query.py"
+      ],
+      "coverage_capability": "analytics/variant-query-and-visualization",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Synthetic dataset bindings and local query scenarios exist, but they do not validate hereditary-cancer screening as the confirmed demo scenario or as a clinical use case."
+    },
+    {
+      "id": "visualization-screens",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "9.5",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "scripts/analytics_experience.py",
+        "tests/test_analytics_experience.py",
+        "docs/analytics-query.md"
+      ],
+      "coverage_capability": "analytics/variant-query-and-visualization",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Six local access-aware view models are implemented and tested, but the chosen screen set remains a proposed accelerator choice without reviewed external confirmation."
+    },
+    {
+      "id": "delta-layout",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "7.10",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "scripts/variant_store.py",
+        "tests/test_variant_store.py",
+        "docs/variant-store.md"
+      ],
+      "coverage_capability": "variant-store/delta-variant-store",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "The local harness records a clustering strategy and maintenance state, but SQLite does not execute Delta optimization and representative-volume validation has not confirmed the strategy."
+    },
+    {
+      "id": "performance-and-kpis",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "9.6",
+          "status": "complete"
+        },
+        {
+          "task": "12.2",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "scripts/analytics_experience.py",
+        "tests/test_analytics_experience.py",
+        "docs/analytics-query.md"
+      ],
+      "coverage_capability": "analytics/variant-query-and-visualization",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "A 1,000 ms local synthetic query target is measured and explicitly labelled an assumption. The end-to-end accelerator KPI task remains open and no production target is confirmed."
+    },
+    {
+      "id": "purview-and-analytics-services",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "8.9",
+          "status": "complete"
+        },
+        {
+          "task": "9.2",
+          "status": "complete"
+        },
+        {
+          "task": "10.8",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "docs/coverage.md",
+        "docs/limitations.md"
+      ],
+      "coverage_capability": "governance/access-and-lineage",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Purview lineage, deployed Databricks or Fabric surfaces, Azure ML or AI Foundry, and the governed query server are not implemented. Service selection remains deployment configuration and an assumption."
+    },
+    {
+      "id": "personal-public-repository",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "10.2",
+          "status": "open"
+        },
+        {
+          "task": "10.11",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "docs/engineering-controls.md",
+        "CONTRIBUTING.md"
+      ],
+      "coverage_capability": "platform/engineering-workflow",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Current repository evidence documents a personal public repository and tier substitutes, but that deployment choice is not a confirmed requirement for every accelerator deployment."
+    },
+    {
+      "id": "solution-engineer-audience",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "11.16",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "README.md",
+        "docs/demo-runbook.md",
+        "docs/coverage.md"
+      ],
+      "coverage_capability": "platform/demo-enablement",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "Documentation is written for a solution-engineer demo, but the first-reader dry run remains open and no reviewed confirmation changes the proposed audience into a product commitment."
+    },
+    {
+      "id": "customer-attributions",
+      "status": "assumption",
+      "task_evidence": [
+        {
+          "task": "11.11",
+          "status": "complete"
+        },
+        {
+          "task": "12.4",
+          "status": "complete"
+        }
+      ],
+      "implementation_evidence": [
+        "docs/claim-register.md",
+        "scripts/review_positioning.py",
+        "tests/test_positioning_review.py"
+      ],
+      "coverage_capability": "platform/demo-enablement",
+      "coverage_status": "Partially demonstrated",
+      "assessment": "No cleared customer attribution is recorded. The automated review continues to prohibit customer deployment claims, so the earlier attributions remain unverified and excluded."
+    }
+  ]
+}
