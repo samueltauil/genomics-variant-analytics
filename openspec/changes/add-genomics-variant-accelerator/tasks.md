@@ -70,9 +70,16 @@ Tasks 3.2 and 3.3 verification (2026-09-11): [the staging log](../../../scripts/
 - [x] 3.2 Add source and destination checksum comparison to the pipeline, and verify a deliberately corrupted destination causes the staging record to be marked `failed` and withheld from downstream processing
 - [x] 3.3 Emit the staging record (source path, destination URI, state, integrity result, storage tier, classification) to the staging log table, and verify all six fields are populated for every file of a demo run
 - [ ] 3.4 Register the pipeline with Purview and confirm Copy activity lineage appears for the Files-to-ADLS hop, and verify the staged artifact resolves back to its landing-zone source in the catalog
-Task 3.5 live evidence (2026-09-19): [`infra/modules/storage-actions.bicep`](../../../infra/modules/storage-actions.bicep) deploys `Microsoft.StorageActions/storageTasks/sta` in `rg-genomics-20260919`, `provisioningState: Succeeded`, with a SetBlobTier Hot->Cool tiering condition on staged artifacts past a configurable age threshold and a Storage Blob Data Contributor role assignment for the task's system-assigned identity. Blob index tags are not modeled: the lake account is HNS-enabled (ADLS Gen2), which does not support blob index tags, so that half of the criterion is infeasible on this storage type, not merely unimplemented. The live one-shot verification run (`storageTaskAssignments`) is gated behind a `deployAssignment` parameter defaulted to `false`, deployed only if flipped: adding a `resourceAccessRules` entry for `Microsoft.StorageActions/storageTasks` to the lake account's `networkAcls` was empirically rejected by the Storage resource provider (`InvalidValuesForRequestParameters` on `resourceId`) in a controlled test, even though it is listed as a supported trusted-access resource type; the identical mechanism was proven to work for `Microsoft.DataFactory/factories` in a side-by-side control against the same account. Storage Actions therefore cannot reach a storage account with `publicNetworkAccess: Disabled` today, which task 8.7 requires and which is not weakened for this task. Task 3.5 stays unchecked: the tiering logic and RBAC are deployed and validated, but the acceptance observation -- an artifact past the age threshold actually transitioning tier -- cannot be produced live while task 8.7's network posture holds.
+Task 3.5 contract revision (2026-09-19): live testing confirmed that the
+HNS-enabled lake does not support blob index tags and that Storage Actions
+cannot reach the public-network-disabled account through the tested trusted
+access rule. The reviewed requirement now calls for a private-compatible
+lifecycle mechanism and supported HNS conditions rather than a specific
+Storage Actions/index-tag combination. The deployed Storage Actions task is
+partial evidence only; task completion now requires account-native lifecycle
+tiering and a live URI/lineage-preservation observation.
 
-- [ ] 3.5 Configure the Storage Actions task for blob-side lifecycle (tiering and index tags) on staged artifacts, and verify an artifact past the age threshold transitions tier while its URI and lineage link still resolve
+- [ ] 3.5 Configure private-compatible blob-side lifecycle tiering on staged artifacts using conditions supported by the selected account, and verify an artifact past the age threshold transitions tier while its URI and lineage link still resolve
 
 ## 4. Reference data
 
@@ -299,9 +306,16 @@ retry, or end-to-end presentation was claimed.
 Task 11.3 live verification (2026-09-19): `scripts/check_environment_identifiers.py`, run against the tracked working tree after the `20260919` live deployment, reports no tracked subscription or tenant identifier; the live environment's actual subscription/tenant GUIDs live only in the git-ignored `.azure/environment.env.json`. The parameterized template deployed cleanly for this run using only `infra/main.bicep`'s documented parameters (environment name, region, tags), with no author-specific resource name hardcoded outside the marked demo examples already covered by the pre-existing local scan noted above.
 
 - [x] 11.3 Parameterize every environment-specific value, and verify a scan finds no subscription id, tenant id, or author-specific resource name outside marked examples, and that a clean clone deploys with only the documented required inputs
-Task 11.4 partial live re-verification (2026-09-19): `scripts/Deploy-Accelerator.ps1` is the single entry point; the full foundation, including the new Storage Actions module, was deployed live twice in immediate succession against `rg-genomics-20260919`. Neither run duplicated the taxonomy, role assignments, or the Storage Actions task, and no resource was deleted or recreated. However, `az deployment sub what-if` against the stable environment still reports 23 `Modify` and 4 `Unsupported` entries. Even if those entries appear to be server-defaulted properties and runtime resource identifiers, the requirement explicitly says a complete-environment re-run reports no changes. That acceptance observation has not been produced, so the task remains open.
+Task 11.4 contract revision (2026-09-19): repeated live deployments are
+non-destructive and non-duplicating, but raw ARM what-if reports service
+defaults, read-only values, and runtime identity references as modifications
+or unsupported resources. The reviewed requirement now calls for a
+version-controlled, fail-closed normalization report that retains raw output,
+recognizes only documented noise, and reports every unfamiliar difference as
+pending. Task completion requires that normalized report to return no
+effective changes against the complete environment.
 
-- [ ] 11.4 Make provisioning idempotent from a single entry point with a stated duration, and verify a re-run after a partial failure completes the remainder without duplication and a re-run against a complete environment reports no changes
+- [ ] 11.4 Make provisioning idempotent from a single entry point with a stated duration, and verify a re-run after a partial failure completes the remainder without duplication and a re-run against a complete environment reports no effective changes after documented fail-closed normalization
 Task 11.5 verification (2026-09-19): [`docs/cost-estimate.md`](../../../docs/cost-estimate.md) is dated 2026-09-19 for `eastus2`, derived from the actual deployed Bicep sizing (128 GiB/3,000 IOPS/200 MiB/s share, `Standard_D4s_v7` VM, 32 GiB OS disk, one Storage Actions verification execution meter) and current Azure Retail Prices API rates. It states per-delivery cost (~$0.39), idle cost (~$0.601/day, dominated by the provisioned share), the additional exposure if the VM is left running (~$6.36/day), and names the dominant idle resource explicitly. The `20260919` run's actual accrued cost is well under $1: two brief VM power-on windows of a few minutes each for verification, both immediately deallocated afterward, plus one deployed Storage Actions task definition with no assignment execution billed, against the authorized $150 ceiling.
 
 - [x] 11.5 Produce the cost statement covering per-delivery cost, idle cost, dominant resources, and the estimate's date and region, and verify each element is present and derived from actual resource sizing
