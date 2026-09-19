@@ -24,10 +24,12 @@ configured.
 
 `containers/pipeline/Dockerfile` is a metadata-only synthetic accelerator image;
 the toolchain labels are placeholders, not evidence of a production
-bioinformatics toolchain. The container workflow is ready to build a release
-tag, push to an ACR named by repository variables, and publish both SLSA
-provenance and CycloneDX SBOM attestations to that same registry using
-`push-to-registry: true`.
+bioinformatics toolchain. The container workflow builds a release tag, pushes it to the ACR named by
+repository variables, and publishes both SLSA provenance and CycloneDX SBOM
+attestations to that registry using `push-to-registry: true`. The generated
+SBOM is augmented with the reviewed synthetic toolchain declaration so the
+aligner and variant-caller versions are explicit rather than inferred from
+copied scripts.
 
 `scripts/supply_chain.py` is the pre-allocation gate. It requires a digest,
 repository/commit/workflow provenance, an SBOM containing `aligner` and
@@ -57,10 +59,22 @@ because the verified release is retained. A disposable immutable release
 probe was separately deleted and an attempt to recreate its tag name was
 rejected.
 
-No Azure federated identity or ACR endpoint is configured. A fresh Azure
-foundation resource group exists, but it does not include the release identity
-or registry required here. No image was pushed, so OIDC login, approved
-deployment records, and ACR provenance/SBOM verification remain blocked.
+The live foundation includes an admin-disabled ACR and a managed identity with
+an `AcrPush` grant. `Configure-GitHubOidc.ps1` reads GitHub's repository OIDC
+subject configuration, including the immutable owner/repository identifiers,
+and configures environment-scoped Entra credentials for `release-build`,
+`clinical`, and `research`.
+
+Release `v0.2.1-pipeline` is immutable at commit
+`05c832b79140965f5de1d420476765bed2e9bbff`. Workflow run `35468110327`
+authenticated to Azure through OIDC and pushed the image to
+`acrgentgrxjnw6usjfg.azurecr.io`. Registry-backed `gh attestation verify`
+validated the SLSA provenance and CycloneDX predicates for image digest
+`sha256:c05f74d757061a5e9f07b6c86653b7a8d5b98e0e6d842fbb860510b64606483d`.
+The signed SBOM names `synthetic-aligner-1.0.0` and
+`synthetic-variant-caller-1.0.0`. Repository and environment secret
+enumeration returned no Azure credential. Independent approval and a
+successful protected `clinical` or `research` deployment remain unverified.
 
 ## Automated pull-request review
 
@@ -154,7 +168,7 @@ before configuring these controls.
 | Copilot code review and scheduled agent automation | Require the corresponding Copilot entitlement and feature availability for the account/repository. | Use the repository-owned `engineering-review.yml` and `pipeline-failure-triage.yml` workflows with deterministic Python checks and GitHub's issue API. | The substitute is rule-based, not semantic agent review. Scheduled execution still depends on Actions being enabled, and inactive repositories or platform outages can delay runs. |
 | GitHub-hosted Actions capacity | Public repositories use the public-repository Actions allowance; private-repository minutes and runner access depend on plan and policy. | Run the same dependency-free Python commands on a governed self-hosted runner or an external CI service. | The substitute adds runner hardening, availability, patching, network, and cost responsibilities. |
 | Secret scanning and push protection | Availability and coverage depend on visibility, plan, organization policy, and supported secret patterns. | Keep secretless OIDC deployment, scan in CI, and require managed secret stores for external-tool credentials. | CI detects after push and pattern scanners cannot detect every credential; provider bypass paths and unsupported formats remain. |
-| Immutable releases and artifact attestations | Must be enabled and supported for the target repository and account; attestation availability and retention vary by plan/visibility. | Pin source commit and image digest in a signed external release record and verify it before allocation. | This is not the repository-native immutable tag/release guarantee and introduces external signer and record custody. Live ACR and release acceptance remains unverified until identifiers and artifacts are available. |
+| Immutable releases and artifact attestations | Must be enabled and supported for the target repository and account; attestation availability and retention vary by plan/visibility. | Pin source commit and image digest in a signed external release record and verify it before allocation. | This is not the repository-native immutable tag/release guarantee and introduces external signer and record custody. The live public-repository acceptance does not prove availability for a different account tier. |
 | Release assets for reference data | Each release asset is limited to the platform's per-file size ceiling; reference genomes can exceed it. | Store reference data in governed object storage and attach only the versioned manifest and checksums to the release. | Reproducibility depends on object-store retention, authorization, and URI durability in addition to the release. |
 
 Repository workflows are configuration artifacts, not proof that required

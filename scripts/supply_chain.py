@@ -131,6 +131,135 @@ def augment_cyclonedx(sbom_path: Path, toolchain_path: Path) -> None:
         destination.write("\n")
 
 
+def _verification_result(payload: Any, name: str) -> Mapping[str, Any]:
+    if isinstance(payload, list):
+        if len(payload) != 1:
+            raise ValueError(f"{name} must contain exactly one verified attestation.")
+        payload = payload[0]
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"{name} must be a verification result.")
+    result = payload.get("verificationResult")
+    if not isinstance(result, Mapping):
+        raise ValueError(f"{name} has no verificationResult.")
+    return result
+
+
+def trace_variant_supply_chain(
+    variant: Mapping[str, Any],
+    image: str,
+    release_verification: Any,
+    provenance_verification: Any,
+    sbom_verification: Any,
+) -> dict[str, Any]:
+    pipeline_version = _required_text(
+        variant.get("pipeline_version"), "variant.pipeline_version"
+    )
+    for field in ("CHROM", "POS", "REF", "ALT", "source_file_uri"):
+        if variant.get(field) in (None, ""):
+            raise ValueError(f"variant.{field} is required.")
+
+    image = _required_text(image, "image")
+    if ":" not in image:
+        raise ValueError("image must include the pipeline version tag.")
+    image_repository, image_tag = image.rsplit(":", 1)
+    if image_tag != pipeline_version:
+        raise ValueError("Image tag does not match variant pipeline_version.")
+
+    release = _verification_result(release_verification, "Release verification")
+    release_statement = release.get("statement")
+    if not isinstance(release_statement, Mapping):
+        raise ValueError("Release verification has no statement.")
+    release_subjects = release_statement.get("subject")
+    if not isinstance(release_subjects, list):
+        raise ValueError("Release verification has no subjects.")
+    release_subject = next(
+        (
+            subject
+            for subject in release_subjects
+            if isinstance(subject, Mapping)
+            and str(subject.get("uri", "")).endswith(f"@{pipeline_version}")
+        ),
+        None,
+    )
+    if release_subject is None:
+        raise ValueError("Release attestation does not match variant pipeline_version.")
+    release_digest = release_subject.get("digest")
+    release_commit = (
+        release_digest.get("sha1") if isinstance(release_digest, Mapping) else None
+    )
+    if not isinstance(release_commit, str) or not _COMMIT.fullmatch(release_commit):
+        raise ValueError("Release attestation does not contain a full commit SHA.")
+
+    provenance = _verification_result(provenance_verification, "Provenance verification")
+    provenance_statement = provenance.get("statement")
+    certificate = provenance.get("signature", {}).get("certificate")
+    if not isinstance(provenance_statement, Mapping) or not isinstance(certificate, Mapping):
+        raise ValueError("Provenance verification is incomplete.")
+    if provenance_statement.get("predicateType") != "https://slsa.dev/provenance/v1":
+        raise ValueError("Unexpected provenance predicate type.")
+    if certificate.get("sourceRepositoryDigest") != release_commit:
+        raise ValueError("Provenance commit does not match the immutable release.")
+    if certificate.get("sourceRepositoryRef") != f"refs/tags/{pipeline_version}":
+        raise ValueError("Provenance source ref does not match pipeline_version.")
+    provenance_subjects = provenance_statement.get("subject")
+    if not isinstance(provenance_subjects, list) or len(provenance_subjects) != 1:
+        raise ValueError("Provenance must identify exactly one image.")
+    provenance_subject = provenance_subjects[0]
+    if not isinstance(provenance_subject, Mapping):
+        raise ValueError("Provenance image subject is invalid.")
+    if provenance_subject.get("name") != image_repository:
+        raise ValueError("Provenance image does not match the requested image.")
+    image_digest = provenance_subject.get("digest", {}).get("sha256")
+    if not isinstance(image_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", image_digest):
+        raise ValueError("Provenance image digest is invalid.")
+
+    sbom = _verification_result(sbom_verification, "SBOM verification")
+    sbom_statement = sbom.get("statement")
+    if not isinstance(sbom_statement, Mapping):
+        raise ValueError("SBOM verification has no statement.")
+    if sbom_statement.get("predicateType") != "https://cyclonedx.org/bom":
+        raise ValueError("Unexpected SBOM predicate type.")
+    sbom_subjects = sbom_statement.get("subject")
+    if not isinstance(sbom_subjects, list) or len(sbom_subjects) != 1:
+        raise ValueError("SBOM must identify exactly one image.")
+    sbom_subject = sbom_subjects[0]
+    if (
+        not isinstance(sbom_subject, Mapping)
+        or sbom_subject.get("name") != image_repository
+        or sbom_subject.get("digest", {}).get("sha256") != image_digest
+    ):
+        raise ValueError("SBOM subject does not match the provenance image.")
+    cyclonedx = sbom_statement.get("predicate")
+    components = cyclonedx.get("components") if isinstance(cyclonedx, Mapping) else None
+    if not isinstance(components, list):
+        raise ValueError("Verified CycloneDX SBOM has no component list.")
+    toolchain = {
+        component.get("name"): component.get("version")
+        for component in components
+        if isinstance(component, Mapping)
+        and component.get("name") in REQUIRED_TOOLS
+        and isinstance(component.get("version"), str)
+        and component["version"]
+    }
+    missing_tools = REQUIRED_TOOLS - set(toolchain)
+    if missing_tools:
+        raise ValueError(
+            f"Verified CycloneDX SBOM is missing required tools: {sorted(missing_tools)}."
+        )
+
+    return {
+        "variant": {
+            field: variant[field]
+            for field in ("CHROM", "POS", "REF", "ALT", "source_file_uri")
+        },
+        "pipeline_version": pipeline_version,
+        "release_commit": release_commit,
+        "image": image,
+        "image_digest": f"sha256:{image_digest}",
+        "toolchain": toolchain,
+    }
+
+
 def verify_gh_attestations(
     image: str,
     repository: str,

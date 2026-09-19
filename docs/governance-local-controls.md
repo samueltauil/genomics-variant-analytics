@@ -123,9 +123,12 @@ tracked IaC and scripts, and the current working tree. They confirm the code
 and infrastructure definitions are managed-identity-only with no embedded
 connection string or storage key. The fresh `rg-genomics-20260919` group
 contains the three managed identities, storage accounts, private endpoints and
-Data Factory, but fresh data-plane acceptance was not completed. Its presence
-does not establish that managed-identity authentication, private endpoints or
-service-side audit retention were exercised in the current environment.
+Data Factory. The in-network acceptance run exercised managed-identity SMB,
+taxonomy reads, staging writes, processing reads, and the expected denied
+writes and landing-share access while public data-plane access remained
+disabled. The OIDC release workflow also authenticated as the pipeline
+identity and pushed to the admin-disabled ACR. No private governed query
+endpoint or service-side immutable audit store was exercised.
 
 ## External sharing approval gate
 
