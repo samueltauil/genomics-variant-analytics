@@ -37,7 +37,7 @@ The background material separates confirmed items from proposed ones. Items belo
 
 Two steps described in the study are not supported by the platform as documented, and the specs are written without them:
 
-- **Azure Storage Actions cannot move data from Azure Files to Blob.** It operates on Azure Blob Storage and Azure Data Lake Storage only. The staging capability is specified by behavior (move, verify, record lineage, tier) rather than by that service; see [design.md](design.md) for the mechanism.
+- **Azure Storage Actions cannot move data from Azure Files to Blob.** It operates on Azure Blob Storage and Azure Data Lake Storage only. The staging capability is specified by behavior (move, verify, record lineage, tier) rather than by that service. Blob-side lifecycle uses a mechanism compatible with the selected account and private-network posture; see [design.md](design.md).
 - **Event Grid raises no file-created event for Azure file shares.** Storage events cover Blob and ADLS Gen2 only, so file arrival in the landing zone is detected by scan rather than by event.
 
 Two constraints apply across every capability: all demo data is synthetic with no real PHI, and nothing in this accelerator asserts that genomic data becomes compliant by using it — compliance depends on the customer's configuration, jurisdiction, and operating procedures.

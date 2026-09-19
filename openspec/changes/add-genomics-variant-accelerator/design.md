@@ -45,7 +45,7 @@ The [genomics storage workload note](../../../docs/genomics-workload-context.md)
 
 The staging spec requires movement plus integrity verification plus lineage. Storage Actions cannot read a file share at all, so it cannot be the mover.
 
-Chosen: a Data Factory (Fabric or Azure) Copy activity as the mover, because Copy is one of the three activity types that push lineage into Purview automatically, and it can mount an SMB/Azure Files source and write to ADLS. Storage Actions is retained for what it is actually built for — tiering, retention, and index-tag management on the blob side after landing — which is how the staging spec's lifecycle requirement is met.
+Chosen: a Data Factory (Fabric or Azure) Copy activity as the mover, because Copy is one of the three activity types that push lineage into Purview automatically, and it can mount an SMB/Azure Files source and write to ADLS. Blob-side lifecycle uses the mechanism supported by the selected account and network posture. For the HNS-enabled, public-network-disabled demo lake, account-native lifecycle management provides service-side tiering without unsupported blob index tags or a public endpoint. Storage Actions remains an option for compatible Blob accounts, not a requirement of the accelerator contract.
 
 Alternatives considered:
 - **AzCopy on a scheduled agent.** Simplest and fastest for bulk transfer, but produces no catalog lineage and needs a hosted runner. Kept as the fallback for very large single files where Copy activity throughput is insufficient.
@@ -138,9 +138,26 @@ Two requirements exist because the audience is *another* engineer rather than th
 
 The documentation splits by document rather than by audience: a front door, a runbook, a claim register, and a limitations list, all for the same reader at different points in the flow.
 
+### 14. Normalize ARM what-if noise without hiding drift
+
+ARM what-if returns service-populated and runtime-resolved differences for an
+otherwise unchanged deployment. Observed examples include Data Factory managed
+private endpoint addresses, publish timestamps, private endpoint DNS child
+metadata, network defaults, storage retention defaults, and role-assignment
+identifiers that depend on managed-identity principal IDs.
+
+The deployment entry point therefore keeps the raw what-if result and applies a
+version-controlled allowlist of property paths and runtime-reference cases that
+have been verified as non-effective. It reports "no effective changes" only
+when every create, delete, modify, or unsupported result is either absent or
+fully covered by that allowlist. Any new resource, property path, or diagnostic
+fails closed as a pending change. This preserves the idempotence acceptance
+signal without presenting Azure's known prediction noise as real drift or
+silently ignoring an unfamiliar difference.
+
 ## Risks / Trade-offs
 
-- **The Storage Actions step in the source material is wrong, and it may appear in earlier architecture decks** → the design keeps the same narrative shape (landing zone → automated movement → object storage) so the demo story survives, while the implementation uses Copy activity; Storage Actions still appears, correctly scoped to blob lifecycle.
+- **The Storage Actions step in the source material is wrong, and it may appear in earlier architecture decks** → the design keeps the same narrative shape (landing zone → automated movement → object storage) so the demo story survives, while the implementation uses Copy activity and an account-compatible blob lifecycle mechanism.
 - **Polling adds arrival latency and metadata IOPS load on the share** → poll a bounded set of run folders on an interval tuned to run duration; Azure Files charges metadata-heavy workloads with higher latency, so the scan must list run directories rather than walk the whole share.
 - **Healthcare data solutions is mid-transition to a customer-managed package** → depend on the folder taxonomy and medallion conventions, which are stable and documented, rather than on the managed solution's deployed artifacts.
 - **Purview cannot show record-level lineage** → provenance columns and the metadata store are the system of record for fine-grained lineage; Purview is presented as the coarse-grained catalog, and demo scripts must not promise variant-level lineage from Purview.

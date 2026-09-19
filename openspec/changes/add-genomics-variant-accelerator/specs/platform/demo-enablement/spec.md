@@ -49,7 +49,7 @@ The repository SHALL contain no tenant identifier, subscription identifier, reso
 
 ### Requirement: Provisioning is repeatable and idempotent
 
-Provisioning SHALL be executable from a single documented entry point, SHALL be safe to re-run after a partial failure, and SHALL state its expected duration. Re-running against a complete environment SHALL NOT duplicate resources.
+Provisioning SHALL be executable from a single documented entry point, SHALL be safe to re-run after a partial failure, and SHALL state its expected duration. Re-running against a complete environment SHALL NOT duplicate resources. The entry point SHALL report whether there are effective desired-state changes after normalizing documented ARM what-if noise from server-defaulted, read-only, or runtime-resolved properties. Raw what-if output and every normalization rule SHALL remain inspectable; an unrecognized create, delete, modify, or unsupported result SHALL prevent a no-change report.
 
 #### Scenario: Provisioning is re-run after a failure
 
@@ -59,7 +59,14 @@ Provisioning SHALL be executable from a single documented entry point, SHALL be 
 #### Scenario: Provisioning is re-run against a complete environment
 
 - **WHEN** provisioning is re-run against an environment that is already complete
-- **THEN** it reports no changes and creates no additional resources
+- **THEN** it reports no effective changes after applying the documented normalization rules
+- **AND** it creates no additional resources
+
+#### Scenario: What-if returns an unrecognized difference
+
+- **WHEN** ARM what-if returns a difference that is not covered by a documented normalization rule
+- **THEN** provisioning reports the difference as a pending change
+- **AND** it does not describe the environment as unchanged
 
 ### Requirement: Cost is stated before provisioning
 

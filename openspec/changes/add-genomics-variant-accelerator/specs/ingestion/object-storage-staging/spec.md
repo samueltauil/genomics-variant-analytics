@@ -53,13 +53,19 @@ Staging SHALL record a lineage link between the landing-zone source file and the
 
 ### Requirement: Lifecycle and tiering policy
 
-Staged artifacts SHALL be assigned a storage tier according to a configured lifecycle policy, and the policy SHALL be able to transition artifacts to cooler tiers over time without breaking lineage links or downstream URI references.
+Staged artifacts SHALL be assigned a storage tier according to a configured lifecycle policy, and the policy SHALL be able to transition artifacts to cooler tiers over time without breaking lineage links or downstream URI references. The lifecycle mechanism SHALL be compatible with the selected object-storage account and SHALL NOT require enabling a public data-plane endpoint. Blob index tags SHALL be used only where the selected account supports them; an HNS-enabled ADLS Gen2 account SHALL use supported path, prefix, metadata, or classification conditions instead of fabricating or requiring unsupported index tags.
 
 #### Scenario: Artifact is tiered down
 
 - **WHEN** a staged artifact meets the lifecycle policy's age threshold
 - **THEN** it transitions to the configured cooler tier
 - **AND** its lineage link and URI continue to resolve
+
+#### Scenario: HNS account does not support blob index tags
+
+- **WHEN** the selected staging account has hierarchical namespace enabled
+- **THEN** lifecycle evaluation uses conditions supported by that account
+- **AND** public data-plane access remains disabled
 
 ### Requirement: Separation of ingestion and analytics storage
 
