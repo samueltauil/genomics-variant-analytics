@@ -78,6 +78,59 @@ def verify_submission(submission: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def augment_cyclonedx(sbom_path: Path, toolchain_path: Path) -> None:
+    with sbom_path.open(encoding="utf-8") as source:
+        sbom = json.load(source)
+    if not isinstance(sbom, dict) or sbom.get("bomFormat") != "CycloneDX":
+        raise ValueError("SBOM must be a CycloneDX document.")
+    components = sbom.get("components")
+    if not isinstance(components, list):
+        raise ValueError("CycloneDX SBOM components must be a list.")
+
+    with toolchain_path.open(encoding="utf-8") as source:
+        toolchain = json.load(source)
+    entries = toolchain.get("components") if isinstance(toolchain, dict) else None
+    if not isinstance(entries, list) or not entries:
+        raise ValueError("Toolchain manifest must contain a nonempty components list.")
+
+    names = set()
+    additions = []
+    for entry in entries:
+        values = _exact_fields(
+            entry, {"name", "version", "source_commit"}, "Toolchain component"
+        )
+        name = _required_text(values["name"], "Toolchain component name")
+        version = _required_text(values["version"], "Toolchain component version")
+        source_commit = _required_text(
+            values["source_commit"], "Toolchain component source_commit"
+        )
+        if name in names:
+            raise ValueError(f"Duplicate toolchain component: {name}.")
+        names.add(name)
+        additions.append(
+            {
+                "type": "application",
+                "name": name,
+                "version": version,
+                "properties": [
+                    {
+                        "name": "org.genomics.source_commit",
+                        "value": source_commit,
+                    }
+                ],
+            }
+        )
+
+    sbom["components"] = [
+        component
+        for component in components
+        if not isinstance(component, Mapping) or component.get("name") not in names
+    ] + additions
+    with sbom_path.open("w", encoding="utf-8", newline="\n") as destination:
+        json.dump(sbom, destination, indent=2, sort_keys=True)
+        destination.write("\n")
+
+
 def verify_gh_attestations(
     image: str,
     repository: str,

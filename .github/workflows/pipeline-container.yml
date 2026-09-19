@@ -79,6 +79,11 @@ jobs:
           output-file: sbom.cdx.json
           upload-artifact: false
 
+      - name: Add declared bioinformatics toolchain to SBOM
+        shell: bash
+        run: |
+          python -c "from pathlib import Path; from scripts.supply_chain import augment_cyclonedx; augment_cyclonedx(Path('sbom.cdx.json'), Path('containers/pipeline/toolchain.json'))"
+
       - name: Attest build provenance to ACR
         uses: actions/attest@v4
         with:
