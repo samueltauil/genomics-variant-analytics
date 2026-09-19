@@ -157,10 +157,12 @@ If attestation publication or verification fails, reject the run rather than
 falling back to an unattested image.
 
 **Repository implementation status:** The container workflow and local
-pre-allocation verifier are implemented, but the public demo repository has no
-configured ACR endpoint or Azure federated identity. No ACR image or attestation
-is claimed as published until a separately authorized, low-cost acceptance
-provides those values.
+pre-allocation verifier are implemented. Release `v0.2.1-pipeline` authenticated
+to Azure through OIDC, pushed the synthetic pipeline image to ACR, and
+published registry-backed SLSA provenance and CycloneDX SBOM attestations.
+This verifies the demo supply-chain path only. It does not establish a
+production bioinformatics toolchain or an independently approved clinical or
+research deployment.
 
 ### Immutable releases cannot be corrected in place
 

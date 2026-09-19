@@ -5,7 +5,12 @@ import subprocess
 import tempfile
 import unittest
 
-from scripts.supply_chain import augment_cyclonedx, verify_gh_attestations, verify_submission
+from scripts.supply_chain import (
+    augment_cyclonedx,
+    trace_variant_supply_chain,
+    verify_gh_attestations,
+    verify_submission,
+)
 
 
 COMMIT = "a" * 40
@@ -27,6 +32,79 @@ def submission():
             {"name": "utility", "version": "python-3.12"},
         ],
         "dependencies": [{"name": "pipeline-definition", "commit": COMMIT}],
+    }
+
+
+def verified_chain():
+    image_name = "registry.invalid/genomics-variant-pipeline"
+    digest = "b" * 64
+    return {
+        "variant": {
+            "CHROM": "chr17",
+            "POS": 43071077,
+            "REF": "A",
+            "ALT": "G",
+            "source_file_uri": "abfss://synthetic/vcf/SYN-RUN-001.vcf",
+            "pipeline_version": "v0.2.1-pipeline",
+        },
+        "image": f"{image_name}:v0.2.1-pipeline",
+        "release": {
+            "verificationResult": {
+                "statement": {
+                    "subject": [
+                        {
+                            "uri": (
+                                "pkg:github/samueltauil/"
+                                "genomics-variant-analytics@v0.2.1-pipeline"
+                            ),
+                            "digest": {"sha1": COMMIT},
+                        }
+                    ]
+                }
+            }
+        },
+        "provenance": [
+            {
+                "verificationResult": {
+                    "signature": {
+                        "certificate": {
+                            "sourceRepositoryDigest": COMMIT,
+                            "sourceRepositoryRef": "refs/tags/v0.2.1-pipeline",
+                        }
+                    },
+                    "statement": {
+                        "predicateType": "https://slsa.dev/provenance/v1",
+                        "subject": [
+                            {"name": image_name, "digest": {"sha256": digest}}
+                        ],
+                    },
+                }
+            }
+        ],
+        "sbom": [
+            {
+                "verificationResult": {
+                    "statement": {
+                        "predicateType": "https://cyclonedx.org/bom",
+                        "subject": [
+                            {"name": image_name, "digest": {"sha256": digest}}
+                        ],
+                        "predicate": {
+                            "components": [
+                                {
+                                    "name": "aligner",
+                                    "version": "synthetic-aligner-1.0.0",
+                                },
+                                {
+                                    "name": "variant-caller",
+                                    "version": "synthetic-variant-caller-1.0.0",
+                                },
+                            ]
+                        },
+                    }
+                }
+            }
+        ],
     }
 
 
@@ -130,6 +208,39 @@ class SupplyChainTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "Attestation verification failed"):
             verify_gh_attestations("registry.invalid/image", "owner/repo", runner=runner)
+
+    def test_variant_resolves_through_release_and_signed_image(self):
+        chain = verified_chain()
+        result = trace_variant_supply_chain(
+            chain["variant"],
+            chain["image"],
+            chain["release"],
+            chain["provenance"],
+            chain["sbom"],
+        )
+        self.assertEqual(result["pipeline_version"], "v0.2.1-pipeline")
+        self.assertEqual(result["release_commit"], COMMIT)
+        self.assertEqual(
+            result["toolchain"],
+            {
+                "aligner": "synthetic-aligner-1.0.0",
+                "variant-caller": "synthetic-variant-caller-1.0.0",
+            },
+        )
+
+    def test_variant_trace_rejects_a_cross_release_image(self):
+        chain = verified_chain()
+        chain["provenance"][0]["verificationResult"]["signature"]["certificate"][
+            "sourceRepositoryRef"
+        ] = "refs/tags/v0.2.0-pipeline"
+        with self.assertRaisesRegex(ValueError, "source ref"):
+            trace_variant_supply_chain(
+                chain["variant"],
+                chain["image"],
+                chain["release"],
+                chain["provenance"],
+                chain["sbom"],
+            )
 
 
 if __name__ == "__main__":

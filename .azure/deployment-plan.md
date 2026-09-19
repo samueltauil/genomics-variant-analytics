@@ -95,16 +95,16 @@ Read back on September 19, 2026:
 
 | Area | State |
 |---|---|
-| Identities, landing account, private endpoints, Data Factory | Resources exist; no fresh component acceptance claimed |
-| Object-storage deployment | Failed |
-| Storage Actions lifecycle deployment | Failed |
-| Network redeployment | Cancelled during finalization |
+| Identities, storage accounts, private endpoints, Data Factory | Deployment succeeded; in-network taxonomy, identity, and access checks passed |
+| Storage Actions lifecycle | Task definition deployed; execution against the private HNS account remains blocked, so no tier transition is claimed |
+| Container registry and release identity | Admin-disabled ACR deployed; `v0.2.1-pipeline` was pushed through GitHub OIDC and its registry attestations verified |
+| Governed query endpoint | Not deployed |
 | Verification VM | Deallocated |
 | Resource-group expiry | October 3, 2026 |
 
 Storage and networking resources remain deployed and may continue to accrue
-cost. The retained group is not a ready environment and does not replace the
-historical acceptance evidence above.
+cost. The retained group is ready for the accepted foundation and release
+operations above, but it is not a complete end-to-end demo environment.
 
 ## Cost And Cleanup
 

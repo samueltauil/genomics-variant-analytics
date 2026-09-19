@@ -73,7 +73,7 @@ Task 6.5 is now implemented locally: clinical and research attributes persist in
 
 ## Versioning and Retention
 
-- `pipeline_version` resolves to the retained immutable GitHub release `v0.1.0-pipeline` for this synthetic pipeline commit, with a verified release attestation and locked assets. ACR image provenance/SBOM publication remains unverified until an independently reviewed Azure/ACR configuration is supplied.
+- `pipeline_version` resolves to immutable GitHub release `v0.2.1-pipeline` for the accepted synthetic pipeline commit. The verified release attestation, ACR SLSA provenance, and CycloneDX SBOM form a checked chain to image digest `sha256:c05f74d757061a5e9f07b6c86653b7a8d5b98e0e6d842fbb860510b64606483d`, `synthetic-aligner-1.0.0`, and `synthetic-variant-caller-1.0.0`.
 - Reference builds are to be versioned with checksums and immutable manifests. Reference genome bytes remain in object storage, not Git or release attachments.
 - Parsed Delta rows are additive to retained VCF and other file artifacts; the store does not replace those artifacts.
 - Reprocessing must remain traceable to the processing version and source artifact. A new run must not silently rewrite the evidence for an earlier result.

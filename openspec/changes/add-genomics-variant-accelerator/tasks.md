@@ -178,15 +178,48 @@ Tasks 9.1-9.4 local verification (2026-09-19): scripts/analytics_query.py implem
 
 ## 10. Engineering platform and AI context
 
-- [ ] 10.1 Configure the Azure federated identity credential and convert deployment workflows to OIDC, and verify a deployment succeeds while an enumeration of repository and environment secrets returns no Azure credential
+Task 10.1 live verification (2026-09-19): the pipeline deployment workflow
+used GitHub OIDC to authenticate as
+`id-genomics-pipeline-tgrxjnw6usjfg`, log in to the admin-disabled ACR, and
+push `genomics-variant-pipeline:v0.2.1-pipeline`. The first attempt exposed an
+immutable-subject mismatch: this repository emits
+`repo:samueltauil@279246/genomics-variant-analytics@1358346690:environment:*`,
+not the mutable owner/name subject. `Configure-GitHubOidc.ps1` now reads the
+repository OIDC customization endpoint and creates or updates each Entra
+federated credential to the emitted prefix. Workflow run `35468110327`
+completed successfully after that correction. GitHub API enumeration returned
+zero repository secrets and zero secrets in `release-build`, `clinical`, and
+`research`; the Azure client, tenant, subscription, resource group, and ACR
+identifiers remain repository variables rather than credentials.
+
+- [x] 10.1 Configure the Azure federated identity credential and convert deployment workflows to OIDC, and verify a deployment succeeds while an enumeration of repository and environment secrets returns no Azure credential
 - [ ] 10.2 Create `clinical` and `research` environments with required reviewers, self-review prevented, administrator bypass disabled, and deployment refs limited to release tags, and verify a branch deployment is refused, a self-approval is refused, and an approved tag deployment produces a deployment record with environment, approver, commit, and outcome
   - Partial implementation (2026-09-19): both environments are configured live with `can_admins_bypass=false`, a required reviewer, `prevent_self_review=true`, and a `v*` tag deployment policy. Branch/self-approval/approved-tag execution remains unverified because no independent reviewer or Azure target is configured.
 - [x] 10.3 Enable immutable releases and publish the first pipeline release from a draft with assets attached, and verify the tag cannot be moved or deleted, the tag name cannot be reused after deletion, and the release attestation is retrievable
   - Live acceptance (2026-09-19): enabled immutable releases; published `v0.1.0-pipeline` from a draft with `pipeline-release-manifest.json`, `reference-compatibility.json`, `toolchain.json`, and `SHA256SUMS`. `gh release view` reports `immutable=true`; `gh release verify v0.1.0-pipeline --format json` verified the release attestation and all asset digests. Force-moving and deleting the tag were rejected by repository rules. A disposable immutable `v0.1.0-reuse-probe` was published, deleted with its tag, and a push attempting to recreate the same tag name was rejected. The retained tag resolves to commit `febafa0cc78777da8ae046253051c0b4aec83e41`.
-- [ ] 10.4 Add build provenance attestation to the pipeline container workflow with `push-to-registry` targeting ACR, and verify `gh attestation verify oci://<acr>/<image>` succeeds and reports the originating repository, commit, and workflow
-  - Partial implementation (2026-09-19): `.github/workflows/pipeline-container.yml` uses OIDC Azure login, ACR push, and `actions/attest-build-provenance` with `push-to-registry: true`. Live verification is blocked by missing ACR/OIDC variables.
-- [ ] 10.5 Add SBOM generation and SBOM attestation to the container workflow, and verify the aligner and variant-caller versions are retrievable from a variant record's `pipeline_version`
-  - Partial implementation (2026-09-19): the workflow generates CycloneDX SBOM data and publishes an SBOM attestation; the synthetic image/toolchain metadata and local verifier are tested. Live ACR and variant-to-release resolution remain unverified.
+Task 10.4 live verification (2026-09-19): release workflow run `35468110327`
+pushed
+`acrgentgrxjnw6usjfg.azurecr.io/genomics-variant-pipeline:v0.2.1-pipeline`
+with digest
+`sha256:c05f74d757061a5e9f07b6c86653b7a8d5b98e0e6d842fbb860510b64606483d`.
+`gh attestation verify` fetched the SLSA v1 bundle from ACR and verified
+repository `samueltauil/genomics-variant-analytics`, commit
+`05c832b79140965f5de1d420476765bed2e9bbff`, workflow
+`.github/workflows/pipeline-container.yml`, and source ref
+`refs/tags/v0.2.1-pipeline`.
+
+- [x] 10.4 Add build provenance attestation to the pipeline container workflow with `push-to-registry` targeting ACR, and verify `gh attestation verify oci://<acr>/<image>` succeeds and reports the originating repository, commit, and workflow
+Task 10.5 live verification (2026-09-19): the same workflow generated a
+CycloneDX 1.6 SBOM, added the reviewed synthetic toolchain declaration, and
+published its signed attestation to ACR. Registry-backed verification returned
+`aligner` version `synthetic-aligner-1.0.0` and `variant-caller` version
+`synthetic-variant-caller-1.0.0` for the image digest above. The
+`trace_variant_supply_chain` verifier starts from a stored synthetic variant
+whose `pipeline_version` is `v0.2.1-pipeline` and fails closed unless the
+immutable release, provenance tag and commit, image digest, SBOM subject, and
+required tool versions agree.
+
+- [x] 10.5 Add SBOM generation and SBOM attestation to the container workflow, and verify the aligner and variant-caller versions are retrievable from a variant record's `pipeline_version`
 - [x] 10.6 Enforce attestation verification in the pipeline submission path, and verify an unattested image is rejected and an untracked dependency without a commit SHA is rejected before compute allocation
   - Local implementation verified (2026-09-19): `submit_pipeline_workflow` rejects incomplete/unattested evidence and dependencies without full commit SHAs before calling the allocator; live registry verification remains blocked with 10.4.
 - [x] 10.7 Author the repository AI context — instructions, prompt files, and agent skills covering the VCF schema, no-PHI constraint, reference-build handling, and positioning limits — and verify a request to add a variant-store column returns a response reflecting those rules unprompted
@@ -307,6 +340,20 @@ pass.
 
 - [ ] 12.1 Execute the full seven-step demo scenario from instrument write through governance review, and verify each step produces the observable output named in its capability spec
 - [x] 12.2 Measure and report the accelerator KPIs (pipeline success rate, arrival-to-queryable time, query response time, percentage of records linked to source files, reprocessing time, cost per sample), and verify each is produced from instrumented data rather than estimated
-- [ ] 12.3 Trace a single variant end to end from its record through `pipeline_version` to the immutable release, the release attestation, the build provenance, and the SBOM, and verify every hop resolves without a self-asserted link
+Task 12.3 live verification (2026-09-19): a synthetic Bronze record
+(`chr17:43071077 A>G`, source
+`abfss://synthetic@lake.invalid/Process/VCF/SYN-RUN-TRACE-001.vcf`) was ingested
+with `pipeline_version: v0.2.1-pipeline`. `trace_variant_supply_chain`
+validated that value against GitHub's verified immutable-release attestation,
+which binds the tag to commit
+`05c832b79140965f5de1d420476765bed2e9bbff`; the registry-backed SLSA
+attestation binds the same tag and commit to image digest
+`sha256:c05f74d757061a5e9f07b6c86653b7a8d5b98e0e6d842fbb860510b64606483d`;
+and the registry-backed CycloneDX attestation binds that digest to
+`synthetic-aligner-1.0.0` and `synthetic-variant-caller-1.0.0`. The verifier
+rejects a mismatched release tag, commit, image subject, digest, predicate, or
+missing required tool.
+
+- [x] 12.3 Trace a single variant end to end from its record through `pipeline_version` to the immutable release, the release attestation, the build provenance, and the SBOM, and verify every hop resolves without a self-asserted link
 - [x] 12.4 Review all customer-facing material against the positioning constraints, and verify it makes no compliance claim, no released-blueprint claim, no unverified customer attribution, and no clinical determination claim for assisted output
 - [x] 12.5 Cross-check every "proposed" item in the proposal's assumptions against what was actually built, and verify the accelerator documentation still labels each as an assumption or records its confirmation
