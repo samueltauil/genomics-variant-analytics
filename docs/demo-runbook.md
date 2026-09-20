@@ -60,7 +60,8 @@ about 4 minutes for an immediate re-run in the authorized `eastus2`
 subscription on September 19, 2026. The disposable resource group
 `rg-genomics-20260919` exists with expiry October 3, 2026. Its identity,
 network, landing storage, object storage, private endpoint, Data Factory,
-verification-client, and Storage Actions task deployments report `Succeeded`.
+verification-client, and account-native lifecycle-policy deployments report
+`Succeeded`.
 The verification VM is deallocated. This is foundation readiness only, not an
 end-to-end demo environment.
 
@@ -112,7 +113,7 @@ consideration or specified-only behavior.
 | Step | Observable output required | Current evidence |
 |---|---|---|
 | 1. Ingest | Unchanged instrument path, run/sample identifiers, file arrival, size, timestamp, and `arriving`/`complete`/`failed` state | **Local:** metadata-only layout, inventory, and manifest-declared failure and retry. **Previously recorded:** disposable storage acceptance. No instrument or SMB transfer was exercised. |
-| 2. Stage | Source path, destination URI, transfer state, integrity result, storage tier, classification, and landing-to-object lineage | **Local:** staging log and checksum tests. **Live partial:** the Storage Actions task definition and identity are deployed, but no lifecycle transition ran because the private HNS account rejects the available Storage Actions access path. Purview lineage is not implemented. |
+| 2. Stage | Source path, destination URI, transfer state, integrity result, storage tier, classification, and landing-to-object lineage | **Local:** staging log and checksum tests. **Live partial:** an account-native lifecycle policy is deployed on the private HNS lake, and a metadata-only synthetic object resolves at its canonical DFS URI. Its first tier check returned `Hot`; the service-driven transition to `Cool` is pending. Purview lineage is not implemented. |
 | 3. Process | QC → alignment → BAM/CRAM → variant calling → VCF/GVCF, workflow/reference/compute provenance, timings, outcome, and log | **Local:** pure-Python and real Nextflow runs on synthetic data, including success, failure-stage provenance and published outputs. **Unverified:** Azure Batch, Slurm/HPC, concordance and compute release. |
 | 4. Build variant store | Accepted/rejected counts, reference build, pipeline version, source links, rejected records, and maintenance state | **Local:** SQLite Bronze parser and rejection/provenance tests. It is not a deployed Delta store. |
 | 5. Query | Gene, quality, cross-cohort, allele-in-sample, pipeline-version, and sequencing-run results with traceability | **Local:** governed SQLite query engine, notebook-style session, SQL adapter, snapshots and traceability. No deployed notebook or SQL warehouse endpoint. |

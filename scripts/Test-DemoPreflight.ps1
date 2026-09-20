@@ -272,9 +272,10 @@ elseif ($RequireAzureChecks) {
                 # --all is mutually exclusive with --scope; scope alone already includes
                 # assignments inherited from the subscription's management groups.
                 $assignments = Invoke-AzJson @(
-                    'role', 'assignment', 'list', '--assignee', $DeployerObjectId,
+                    'role', 'assignment', 'list', '--assignee-object-id', $DeployerObjectId,
                     '--scope', "/subscriptions/$SubscriptionId",
-                    '--include-inherited', '--subscription', $SubscriptionId, '-o', 'json'
+                    '--include-inherited', '--fill-principal-name', 'false',
+                    '--subscription', $SubscriptionId, '-o', 'json'
                 )
                 $roleNames = @($assignments | Select-Object -ExpandProperty roleDefinitionName -Unique)
                 $hasDeploymentRole = @('Owner', 'Contributor') | Where-Object { $_ -in $roleNames }

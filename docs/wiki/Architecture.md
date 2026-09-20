@@ -40,7 +40,7 @@ flowchart TD
 ## Decisions to Preserve
 
 1. **Scheduled discovery on Azure Files.** The design uses a bounded directory scan and stability checks or a completion marker, rather than assuming a native file-created Event Grid notification for the SMB share.
-2. **Copy and lifecycle are separate.** Data Factory Copy is the proposed Files-to-object-storage mover. Storage Actions is reserved for supported blob-side lifecycle operations after landing, not for copying out of a file share.
+2. **Copy and lifecycle are separate.** Data Factory Copy is the Files-to-object-storage mover. Account-native storage lifecycle management handles supported age and path-based tiering after landing. Storage Actions cannot copy out of a file share, and HNS accounts do not support blob index tags.
 3. **File artifacts and variant rows are different assets.** OneLake shortcuts can expose retained object-storage files in the applicable deployment. Parsed variant rows are physically materialized in Delta; a shortcut does not parse a VCF.
 4. **Fine-grained provenance belongs in records and metadata.** Purview is the proposed coarse-grained catalog and lineage surface, not the source of variant-level lineage.
 5. **Executor equivalence means concordance.** Batch and Slurm results are to be assessed with GATK `Concordance` against a truth set. Bit-for-bit identity is not promised.
@@ -50,7 +50,7 @@ The proposed object-storage taxonomy is `Ingest`, `Process`, `Failed`, `External
 
 ## Deployed Environment and Platform Constraints
 
-A disposable environment was deployed into a sandbox subscription on 2026-09-10/11, remained in place while later tasks were exercised against it, and was fully torn down on 2026-09-18. A separate tagged resource group, `rg-genomics-20260919`, was then created in `eastus2` with an October 3, 2026 expiry tag. Identities, storage accounts, private endpoints, Data Factory, the Storage Actions task definition, an admin-disabled ACR, and a verification VM exist. The private storage acceptance checks passed, the OIDC release workflow pushed an attested image to ACR, and the VM was deallocated on September 19, 2026. The Storage Actions transition and private governed query path remain incomplete. The subscription policies are ordinary for a governed tenant and shaped the design more than any preference did. Treat them as likely in customer environments rather than as local quirks.
+A disposable environment was deployed into a sandbox subscription on 2026-09-10/11, remained in place while later tasks were exercised against it, and was fully torn down on 2026-09-18. A separate tagged resource group, `rg-genomics-20260919`, was then created in `eastus2` with an October 3, 2026 expiry tag. Identities, storage accounts, private endpoints, Data Factory, an account-native lifecycle policy, an admin-disabled ACR, and a verification VM exist. The private storage acceptance checks passed, the OIDC release workflow pushed an attested image to ACR, and the VM is deallocated. The synthetic lifecycle object still reports `Hot`, so the service-driven transition and private governed query path remain incomplete. The subscription policies are ordinary for a governed tenant and shaped the design more than any preference did. Treat them as likely in customer environments rather than as local quirks.
 
 | Observed constraint | Consequence for the design |
 |---|---|

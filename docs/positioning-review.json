@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "review_date": "2026-09-19",
+  "review_date": "2026-09-20",
   "reviewer": "automated repository positioning review",
   "claim_register": "docs/claim-register.md",
-  "claim_register_sha256": "7a8501a1734810ca85108d8938236b36ca2741587f1fe54a29568acabd01306b",
+  "claim_register_sha256": "8e95e898d199cc3a2031c10fa524c69ff97bfd4692969112d37b8cdf6dfa7817",
   "result": "pass",
   "search_terms": [
     "customer",
@@ -220,7 +220,7 @@
     },
     {
       "path": "docs/demo-runbook.md",
-      "line": 256,
+      "line": 257,
       "boundary": "released-blueprint",
       "rule": "released-offering",
       "text": "validated patterns. Do not say it is a released Microsoft blueprint, supported",
@@ -228,7 +228,7 @@
     },
     {
       "path": "docs/demo-runbook.md",
-      "line": 257,
+      "line": 258,
       "boundary": "compliance",
       "rule": "automatic-compliance",
       "text": "product, compliance outcome, confirmed customer deployment, clinical decision",
@@ -244,7 +244,7 @@
     },
     {
       "path": "docs/limitations.md",
-      "line": 381,
+      "line": 382,
       "boundary": "compliance",
       "rule": "automatic-compliance",
       "text": "**Limitation:** Deploying the accelerator does not make genomic data compliant",

@@ -21,6 +21,10 @@ param stagingPrincipalId string
 param pipelinePrincipalId string
 param deployerPrincipalId string
 
+@minValue(0)
+@description('Age in days after last modification before staged Ingest block blobs tier from Hot to Cool.')
+param lifecycleTierAfterDays int = 1
+
 @description('Private endpoints replace this in task 8.7; until then the account is reachable for acceptance testing.')
 param allowPublicNetworkAccess bool = false
 
@@ -97,6 +101,39 @@ resource referenceImmutability 'Microsoft.Storage/storageAccounts/blobServices/c
   }
 }
 
+resource lifecyclePolicy 'Microsoft.Storage/storageAccounts/managementPolicies@2025-01-01' = {
+  parent: account
+  name: 'default'
+  properties: {
+    policy: {
+      rules: [
+        {
+          enabled: true
+          name: 'tier-staged-ingest-to-cool'
+          type: 'Lifecycle'
+          definition: {
+            actions: {
+              baseBlob: {
+                tierToCool: {
+                  daysAfterModificationGreaterThan: lifecycleTierAfterDays
+                }
+              }
+            }
+            filters: {
+              blobTypes: [
+                'blockBlob'
+              ]
+              prefixMatch: [
+                '${filesystemName}/Ingest/'
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+
 resource stagingWrite 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: account
   name: guid(account.id, stagingPrincipalId, blobDataContributorRoleId)
@@ -132,3 +169,4 @@ output storageAccountId string = account.id
 output filesystemName string = filesystem.name
 output referenceContainerName string = referenceZone.name
 output dfsEndpoint string = account.properties.primaryEndpoints.dfs
+output lifecyclePolicyName string = lifecyclePolicy.name

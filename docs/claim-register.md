@@ -108,7 +108,7 @@ Two things in the original material do not survive contact with the platform doc
 
 | Original claim | Reality |
 |---|---|
-| Azure Files → Storage Actions → Blob | Storage Actions operates on Blob and ADLS only. It cannot read a file share. The Files-to-Blob hop uses a Data Factory Copy activity; Storage Actions handles blob lifecycle after landing. |
+| Azure Files to ADLS staging and lifecycle | Data Factory Copy handles the Files-to-ADLS hop. Account-native storage lifecycle management handles supported age and path-based tiering after landing. Storage Actions cannot read an Azure file share, and HNS accounts do not support blob index tags. |
 | Event-driven file arrival | Event Grid raises no file-created event for Azure file shares. Arrival is detected by scheduled scan. |
 
 The narrative shape is unchanged — landing zone, automated movement, object storage — so the story still works. The mechanism named on the slide does not.
