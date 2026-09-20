@@ -40,6 +40,7 @@ local.settings.json
 # Deployed environment identifiers. Subscription and tenant ids never enter this repository.
 /.azure/*.env.json
 /.azure/*.local.*
+/.azure/what-if.*.json
 
 # Build and tooling
 node_modules/

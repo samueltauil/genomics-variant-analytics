@@ -29,10 +29,11 @@ operation.
 
 **Workaround or mitigation:** Use Azure Data Factory or Fabric Data Factory Copy
 activity for the Files-to-ADLS hop and its supported catalog lineage. Retain
-Storage Actions only for blob-side lifecycle operations such as tiering,
-retention, and index tags. AzCopy on a hosted agent is a fallback for a large
-single file when Copy activity throughput is insufficient, but it requires
-separate lineage recording.
+Use account-native lifecycle management for supported blob-side tiering and
+retention after the copy. HNS accounts do not support blob index tags, so rules
+must use supported conditions such as path prefix and age. AzCopy on a hosted
+agent is a fallback for a large single file when Copy activity throughput is
+insufficient, but it requires separate lineage recording.
 
 ### Azure file shares do not emit file-created events
 

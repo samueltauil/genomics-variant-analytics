@@ -20,9 +20,13 @@ After the fixes, preflight reported `Ready: true` with zero blocking failures ag
 
 Two template defects that guaranteed permanent drift were also fixed: the storage modules defaulted `allowPublicNetworkAccess` to `true`, so the template fought the policy that forces `Disabled` on every deployment, and `main.bicep` stamped `utcNow()` into a `deployedOn` tag, re-tagging every resource on each run. Both storage accounts and all three identities now report `NoChange`, and the measured change set on an unchanged environment fell from 36 changes to 25 while `NoChange` rose from 10 to 21.
 
-Task 11.4 stays open. Provisioning is idempotent in substance — it is a single entry point, states its duration, completes a partial failure without duplication, and now prints its pending change set before deploying — but it cannot yet report *no* changes. The residual 21 `Modify` entries are ARM what-if reporting server-assigned properties the template omits, such as `resolutionPolicy`, `isIPv6EnabledPrivateEndpoint`, `privateDnsZoneConfigs` and `lastPublishTime`, plus 4 `Unsupported` role assignments whose resource ids depend on a runtime `reference()`. Those are reporting artifacts rather than real modifications, and closing the criterion honestly requires either pinning every server-defaulted property in the template or narrowing the check to resources what-if can evaluate. No genomic payload, customer data or real identifier was involved, and no resource outside `rg-genomics-demo` was touched.
+Task 11.4 was open at this stage. Provisioning was idempotent in substance, but
+raw ARM what-if could not report no changes because it included server-assigned
+properties and runtime identity references. The September 20 implementation
+record under task 11.4 documents the fail-closed normalizer and completed live
+acceptance.
 
-Demo-preflight/runbook follow-up (2026-09-19): tracked-file scanning now rejects live subscription and tenant identifiers, and the ignored local environment record remains outside a clean clone. A clean-clone local validation and a no-resource subscription what-if are required before describing task 11.3 or 11.4 as locally re-verified. `docs/cost-estimate.md` records a dated `eastus2` USD model from the actual Bicep share, VM, and disk sizing, but retains Private Link, data-plane usage, payload, compute, and analytics costs as exclusions until their inputs or price meters are captured. The runbook has locally runnable bring-up/preflight, synthetic seeding, seven-step capability boundaries, three failure demonstrations, reset diagnostics, and guarded teardown. The fresh-subscription bring-up, complete-environment zero-change output, and cloud reset remain required and the tasks stay unchecked. Task 11.10 is complete: a read-only subscription check found `rg-genomics-demo` absent and zero resources tagged `project=genomics-variant-accelerator`; the runbook and dated cost estimate name the idle-cost resources and rates that matter if teardown is deferred.
+Demo-preflight/runbook follow-up (2026-09-19): tracked-file scanning now rejects live subscription and tenant identifiers, and the ignored local environment record remains outside a clean clone. `docs/cost-estimate.md` records a dated `eastus2` USD model from the actual Bicep share, VM, and disk sizing, but retains Private Link, data-plane usage, payload, compute, and analytics costs as exclusions until their inputs or price meters are captured. The runbook has locally runnable bring-up/preflight, synthetic seeding, seven-step capability boundaries, three failure demonstrations, reset diagnostics, and guarded teardown. The fresh-subscription bring-up was later completed, and the September 20 task 11.4 record documents the complete-environment zero-effective-change result. Cloud reset remains unverified. Task 11.10 is complete: a read-only subscription check found `rg-genomics-demo` absent and zero resources tagged `project=genomics-variant-accelerator`; the runbook and dated cost estimate name the idle-cost resources and rates that matter if teardown is deferred.
 
 Tasks 11.8-11.9 rehearsed-failure and reset evidence (2026-09-19): `scripts/rehearse_demo_failures.py` drives all three demonstrations from one entry point against the real local stores -- an authoritative-failure-marker transfer interruption and retry through `scripts.scan_landing`, a synthetic VCF row missing ALT through `scripts.variant_store.VariantStore`, and an ungranted raw-file read through `scripts.governance.GovernancePolicy` -- and reports each trigger's actual response next to the exact response its capability spec states; all three currently match. `scripts/reset_demo.py` now also resets one explicitly named demo-owned directory (`rehearsal-landing`) alongside its named SQLite files, never a glob or a scan of the state root itself. `tests/test_reset_demo.py` proves reset is idempotent, that an injected partial interruption (some stores removed, others not) is distinguishable through `--diagnose`, that a subsequent reset finishes only what remains, and that unrelated files and directories inside and outside the state root are left untouched. Both tasks are checked as fully verified locally; this is local SQLite and filesystem evidence only, not a cloud reset, which remains a stated scope limit.
 
@@ -78,6 +82,18 @@ lifecycle mechanism and supported HNS conditions rather than a specific
 Storage Actions/index-tag combination. The deployed Storage Actions task is
 partial evidence only; task completion now requires account-native lifecycle
 tiering and a live URI/lineage-preservation observation.
+
+Task 3.5 implementation evidence (2026-09-20): the lake module now deploys an
+account-native management policy on the HNS-enabled, public-network-disabled
+storage account. The policy tiers block blobs below `healthcare/Ingest/` from
+Hot to Cool after the configured age without relying on blob index tags.
+The policy deployed successfully with a zero-day acceptance threshold. A
+metadata-only synthetic object was created through the private DFS endpoint at
+`Ingest/LifecycleAcceptance/lifecycle-20260920T025447Z.txt`; its ignored local
+record retains the canonical URI and synthetic lineage source. The first
+private check returned HTTP 200 and tier `Hot`. Azure has not yet performed its
+service-scheduled transition, so the task remains open until a later check
+returns `Cool` while the same URI still resolves.
 
 - [ ] 3.5 Configure private-compatible blob-side lifecycle tiering on staged artifacts using conditions supported by the selected account, and verify an artifact past the age threshold transitions tier while its URI and lineage link still resolve
 
@@ -315,8 +331,21 @@ recognizes only documented noise, and reports every unfamiliar difference as
 pending. Task completion requires that normalized report to return no
 effective changes against the complete environment.
 
-- [ ] 11.4 Make provisioning idempotent from a single entry point with a stated duration, and verify a re-run after a partial failure completes the remainder without duplication and a re-run against a complete environment reports no effective changes after documented fail-closed normalization
-Task 11.5 verification (2026-09-19): [`docs/cost-estimate.md`](../../../docs/cost-estimate.md) is dated 2026-09-19 for `eastus2`, derived from the actual deployed Bicep sizing (128 GiB/3,000 IOPS/200 MiB/s share, `Standard_D4s_v7` VM, 32 GiB OS disk, one Storage Actions verification execution meter) and current Azure Retail Prices API rates. It states per-delivery cost (~$0.39), idle cost (~$0.601/day, dominated by the provisioned share), the additional exposure if the VM is left running (~$6.36/day), and names the dominant idle resource explicitly. The `20260919` run's actual accrued cost is well under $1: two brief VM power-on windows of a few minutes each for verification, both immediately deallocated afterward, plus one deployed Storage Actions task definition with no assignment execution billed, against the authorized $150 ceiling.
+Task 11.4 live verification (2026-09-20):
+[`normalize_arm_what_if.py`](../../../scripts/normalize_arm_what_if.py)
+retains raw ARM what-if JSON and permits only reviewed resource-type and
+property-path combinations plus five explicit managed-identity role IDs.
+Unknown paths, resource types, creates, deletes, and unsupported diagnostics
+remain effective changes; focused tests prove those cases fail closed.
+`Deploy-Accelerator.ps1` writes both raw and normalized reports under the
+ignored `.azure` directory. After the account-native lifecycle policy was
+created and the October 3 expiry tag restored, an unchanged live run reported
+`Pending effective changes: none` from 23 reviewed `Modify`, 21 `NoChange`, 8
+`Ignore`, and 5 reviewed `Unsupported` entries. The deployment created no
+resources and completed the existing taxonomy without duplication.
+
+- [x] 11.4 Make provisioning idempotent from a single entry point with a stated duration, and verify a re-run after a partial failure completes the remainder without duplication and a re-run against a complete environment reports no effective changes after documented fail-closed normalization
+Task 11.5 verification (updated 2026-09-20): [`docs/cost-estimate.md`](../../../docs/cost-estimate.md) is dated 2026-09-19 for `eastus2`, derived from the deployed Bicep sizing (128 GiB/3,000 IOPS/200 MiB/s share, `Standard_D4s_v7` VM, and 32 GiB OS disk) and Azure Retail Prices API rates. It states the current default per-delivery cost (~$0.14), idle cost (~$0.601/day, dominated by the provisioned share), the additional exposure if the VM is left running (~$6.36/day), and names the dominant idle resource explicitly. Account-native lifecycle management has no separately deployed task-execution resource; storage transactions remain excluded with the other unsized usage. The optional legacy Storage Actions resources are disabled by default.
 
 - [x] 11.5 Produce the cost statement covering per-delivery cost, idle cost, dominant resources, and the estimate's date and region, and verify each element is present and derived from actual resource sizing
 Task 11.6 live verification (2026-09-19): bring-up against the authorized fresh `ME-MngEnvMCAP403212-tauilsamuel-1` subscription reached the documented ready state twice: preflight passed, then `Deploy-Accelerator.ps1` provisioned the full foundation (identities, VNet/DNS/private endpoints, both storage accounts, Data Factory pipeline, verification VM, Storage Actions task) in about 6 minutes on first bring-up, confirmed by `.azure/environment.env.json` being written with all expected resource names and the taxonomy folders present. Seeding readiness is confirmed by [`Test-Environment.ps1`](../../../scripts/Test-Environment.ps1) reporting all twelve taxonomy directories resolving and the staging identity able to write into them, so a subsequent demo-dataset seed (tasks 1.5/1.6) has a writable destination immediately after bring-up. A second full re-run reached the same ready state in about 4 minutes, confirming the phase durations are representative rather than a one-off.

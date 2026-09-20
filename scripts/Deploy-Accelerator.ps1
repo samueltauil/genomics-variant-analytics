@@ -39,11 +39,14 @@ param(
     [ValidateScript({ Test-Path -LiteralPath $_ -PathType Leaf })]
     [string] $PreflightSnapshotPath,
 
-    [Parameter(HelpMessage = 'Deploy the Storage Actions lifecycle task (task 3.5). Disable to skip it entirely.')]
-    [bool] $DeployStorageActions = $true,
+    [Parameter(HelpMessage = 'Deploy the optional legacy Storage Actions lifecycle task. Account-native lifecycle remains enabled independently.')]
+    [bool] $DeployStorageActions = $false,
 
     [Parameter(HelpMessage = 'Deploy the Azure Container Registry used by the release workflow.')]
     [bool] $DeployContainerRegistry = $true,
+
+    [ValidateRange(0, 365)]
+    [int] $LifecycleTierAfterDays = 1,
 
     [ValidateRange(0, 365)]
     [int] $StorageActionsTierAfterDays = 1
@@ -57,6 +60,7 @@ $templatePath = Join-Path $repositoryRoot 'infra/main.bicep'
 $environmentFile = Join-Path $repositoryRoot '.azure/environment.env.json'
 $keyPath = Join-Path $repositoryRoot '.azure/client.local.key'
 $preflightPath = Join-Path $repositoryRoot 'scripts/Test-DemoPreflight.ps1'
+$whatIfNormalizerPath = Join-Path $repositoryRoot 'scripts/normalize_arm_what_if.py'
 
 Write-Host 'Running Azure preflight before any resource lookup or deployment.'
 $preflightArgs = @(
@@ -226,6 +230,7 @@ $parameters = @(
     "landingProvisionedBandwidthMibps=$ShareBandwidthMibps"
     "deployStorageActions=$($DeployStorageActions.ToString().ToLowerInvariant())"
     "deployContainerRegistry=$($DeployContainerRegistry.ToString().ToLowerInvariant())"
+    "lifecycleTierAfterDays=$LifecycleTierAfterDays"
     "storageActionsTierBeforeDateUtc=$storageActionsTierBeforeDateUtc"
     "storageActionsVerificationRunStartUtc=$storageActionsVerificationRunStartUtc"
 )
@@ -247,6 +252,16 @@ if (-not $PSCmdlet.ShouldProcess("subscription $($account.name)", "deploy $deplo
 $pending = Invoke-Az (
     @('deployment', 'sub', 'what-if', '--no-pretty-print', '-o', 'json') + $common
 ) 'What-if analysis failed' | ConvertFrom-Json
+$rawWhatIfPath = Join-Path $repositoryRoot '.azure/what-if.raw.json'
+$normalizedWhatIfPath = Join-Path $repositoryRoot '.azure/what-if.normalized.json'
+$pending | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $rawWhatIfPath -Encoding utf8
+$normalizerOutput = & python $whatIfNormalizerPath `
+    --input $rawWhatIfPath --output $normalizedWhatIfPath
+$normalizerExit = $LASTEXITCODE
+if ($normalizerExit -eq 2) {
+    throw "ARM what-if normalization failed.`n$($normalizerOutput -join [Environment]::NewLine)"
+}
+$normalizedWhatIf = Get-Content -LiteralPath $normalizedWhatIfPath -Raw | ConvertFrom-Json
 $changeCounts = @{}
 foreach ($change in $pending.changes) {
     $changeCounts[$change.changeType] = 1 + ($changeCounts[$change.changeType] ?? 0)
@@ -255,12 +270,14 @@ $changed = @($pending.changes | Where-Object changeType -notin @('NoChange', 'Ig
 $changeSummary = (
     $changeCounts.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }
 ) -join ', '
-if ($changed.Count -eq 0) {
-    Write-Host "Pending changes: none ($changeSummary). The environment is already complete."
+if ($normalizedWhatIf.noEffectiveChanges) {
+    Write-Host "Pending effective changes: none ($changeSummary). Raw and normalized reports are in .azure/."
 }
 else {
-    Write-Host "Pending changes: $($changed.Count) ($changeSummary)."
-    $changed | ForEach-Object { Write-Host "  $($_.changeType) $($_.resourceId)" }
+    Write-Host "Pending effective changes: $($normalizedWhatIf.effectiveChangeCount) ($changeSummary)."
+    $normalizedWhatIf.effectiveChanges | ForEach-Object {
+        Write-Host "  $($_.changeType) $($_.resourceId): $($_.reason)"
+    }
 }
 
 $deploymentStarted = Get-Date
@@ -377,6 +394,7 @@ $environment = [ordered]@{
     lakeAccount       = $lakeAccount
     lakeFilesystem    = $filesystem
     referenceContainer = $outputs.referenceContainer.value
+    lifecyclePolicy     = $outputs.lifecyclePolicyName.value
     verificationVm    = $clientName
     stagingFactory    = $outputs.stagingFactoryName.value
     stagingPipeline   = $outputs.stagingPipelineName.value

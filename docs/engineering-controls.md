@@ -107,6 +107,22 @@ must update the OpenSpec contract in the same reviewed change. Reference
 version or manifest digest remains run provenance; it is not a new variant
 column.
 
+## ARM what-if normalization
+
+`Deploy-Accelerator.ps1` retains the raw subscription deployment what-if JSON
+under the ignored `.azure` directory, then runs
+`scripts/normalize_arm_what_if.py`. The normalizer recognizes only reviewed
+resource types, property paths, and five managed-identity role-definition IDs.
+Unknown paths, resource types, creates, deletes, and unsupported diagnostics
+remain effective changes. A malformed report fails separately and cannot
+produce a no-change result.
+
+On September 20, 2026, an unchanged deployment of `rg-genomics-20260919`
+reported no effective changes after normalization. The raw result contained 23
+reviewed `Modify`, 21 `NoChange`, 8 `Ignore`, and 5 reviewed `Unsupported`
+entries. Both reports remain local and untracked because the raw resource IDs
+contain the live subscription identifier.
+
 ## Scheduled failure triage
 
 `.github/workflows/pipeline-failure-triage.yml` runs daily at 06:17 UTC and may

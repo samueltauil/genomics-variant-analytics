@@ -43,6 +43,10 @@ param deployStorageActions bool = true
 @description('Deploy the Azure Container Registry used for release pipeline images and attestations.')
 param deployContainerRegistry bool = true
 
+@minValue(0)
+@description('Age in days after last modification before staged Ingest artifacts tier from Hot to Cool through the account-native lifecycle policy.')
+param lifecycleTierAfterDays int = 1
+
 @description('ISO 8601 UTC instant computed by the deploy script from the age threshold; a Hot staged artifact last modified before this instant tiers to Cool.')
 param storageActionsTierBeforeDateUtc string = ''
 
@@ -111,6 +115,7 @@ module lake 'modules/data-lake.bicep' = {
     stagingPrincipalId: identities.outputs.stagingPrincipalId
     pipelinePrincipalId: identities.outputs.pipelinePrincipalId
     deployerPrincipalId: deployerPrincipalId
+    lifecycleTierAfterDays: lifecycleTierAfterDays
   }
 }
 
@@ -224,6 +229,7 @@ output landingUncPath string = landing.outputs.uncPath
 output lakeStorageAccount string = lake.outputs.storageAccountName
 output lakeFilesystem string = lake.outputs.filesystemName
 output referenceContainer string = lake.outputs.referenceContainerName
+output lifecyclePolicyName string = lake.outputs.lifecyclePolicyName
 output stagingIdentityClientId string = identities.outputs.stagingClientId
 output pipelineIdentityClientId string = identities.outputs.pipelineClientId
 output ingestionIdentityClientId string = identities.outputs.ingestionClientId
