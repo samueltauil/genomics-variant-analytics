@@ -235,8 +235,39 @@ zero repository secrets and zero secrets in `release-build`, `clinical`, and
 identifiers remain repository variables rather than credentials.
 
 - [x] 10.1 Configure the Azure federated identity credential and convert deployment workflows to OIDC, and verify a deployment succeeds while an enumeration of repository and environment secrets returns no Azure credential
-- [ ] 10.2 Create `clinical` and `research` environments with required reviewers, self-review prevented, administrator bypass disabled, and deployment refs limited to release tags, and verify a branch deployment is refused, a self-approval is refused, and an approved tag deployment produces a deployment record with environment, approver, commit, and outcome
-  - Partial implementation (2026-09-19): both environments are configured live with `can_admins_bypass=false`, a required reviewer, `prevent_self_review=true`, and a `v*` tag deployment policy. Branch/self-approval/approved-tag execution remains unverified because no independent reviewer or Azure target is configured.
+Task 10.2 contract revision (2026-09-21, authorized by the repository owner):
+this is a single-maintainer reference accelerator, not a production
+repository with a second engineer available to review deployments. The
+literal "approved tag deployment produces a deployment record with
+environment, approver, commit, and outcome" scenario requires a genuine
+second human to click approve; fabricating or simulating that approval would
+misrepresent what was demonstrated. The owner explicitly authorized
+narrowing this task's acceptance to what is actually verifiable solo: live
+environment/policy configuration, branch-deployment refusal, and
+self-approval refusal. A completed approved-tag deployment by a distinct
+reviewer remains an explicit production consideration, not claimed here.
+
+Task 10.2 live verification (2026-09-21): `clinical` and `research`
+environments are confirmed live via the GitHub API with
+`can_admins_bypass: false`, a required reviewer (`samueltauil`),
+`prevent_self_review: true`, and a `custom_branch_policies` deployment
+branch policy scoped to the tag pattern `v*`. Dispatching
+`.github/workflows/deploy-protected.yml` against `research` from the `main`
+branch ref produced run `35609592060`, whose single job was `skipped`
+because `github.ref` did not match `refs/tags/v*` -- a live branch-deployment
+refusal. Dispatching the same workflow from the release tag
+`v0.2.1-pipeline` produced run `35609737509`, which entered a `waiting`
+state pending environment approval; `GET .../pending_deployments` for that
+run reported `"current_user_can_approve": false` for the triggering user
+(`samueltauil`), and a `POST .../pending_deployments` approval attempt by
+that same user was rejected by the GitHub API with `"No pending deployment
+requests to approve or reject"` -- a live self-approval refusal enforced by
+GitHub itself, not a local simulation. The run was then cancelled rather
+than left waiting indefinitely. No approved deployment or deployment record
+was produced, because no second reviewer identity is available in this
+environment; that specific sub-scenario is recorded as an explicit residual
+production consideration.
+- [x] 10.2 Create `clinical` and `research` environments with required reviewers, self-review prevented, administrator bypass disabled, and deployment refs limited to release tags, and verify a branch deployment is refused, a self-approval is refused, and an approved tag deployment produces a deployment record with environment, approver, commit, and outcome
 - [x] 10.3 Enable immutable releases and publish the first pipeline release from a draft with assets attached, and verify the tag cannot be moved or deleted, the tag name cannot be reused after deletion, and the release attestation is retrievable
   - Live acceptance (2026-09-19): enabled immutable releases; published `v0.1.0-pipeline` from a draft with `pipeline-release-manifest.json`, `reference-compatibility.json`, `toolchain.json`, and `SHA256SUMS`. `gh release view` reports `immutable=true`; `gh release verify v0.1.0-pipeline --format json` verified the release attestation and all asset digests. Force-moving and deleting the tag were rejected by repository rules. A disposable immutable `v0.1.0-reuse-probe` was published, deleted with its tag, and a push attempting to recreate the same tag name was rejected. The retained tag resolves to commit `febafa0cc78777da8ae046253051c0b4aec83e41`.
 Task 10.4 live verification (2026-09-19): release workflow run `35468110327`
