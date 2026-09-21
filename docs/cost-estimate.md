@@ -2,9 +2,12 @@
 
 **Status:** current retail-price estimate, not an invoice or a spending cap.
 **Date retrieved:** September 19, 2026. **Region:** `eastus2`. **Currency:** USD.
-**Ceiling for this run:** USD 150 total, authorized for the `20260919` disposable
-environment. This document is the pre-provisioning forecast required before that
-authorization is exercised; deployment is refused if the forecast exceeds it.
+**Ceiling for this run:** USD 500 total, authorized for the `20260919` disposable
+environment (raised from an initial USD 150 ceiling on 2026-09-21 to allow
+previously blocked dependent work -- Purview, Slurm/Managed Lustre, and a
+governed-query analytics engine -- to be attempted). This document is the
+pre-provisioning forecast required before that authorization is exercised;
+deployment is refused if the forecast exceeds it.
 
 This model is intentionally limited to the resources that the current
 `infra/main.bicep` deploys by default, including the account-native storage
@@ -50,7 +53,7 @@ That is a standing charge for as long as the account is alive, unlike every
 other resource in this model, which is either usage-based or already
 deallocated between uses. This foundation is authorized to stay up for
 dependent HPC/end-to-end work of unknown duration, so an always-on $9.86/day
-liability is material against the $150 ceiling if left running by mistake.
+liability is material against the $500 ceiling if left running by mistake.
 Deploying Purview would also require private endpoints and DNS zones for the
 account/portal/ingestion endpoints to satisfy the "public data-plane disabled"
 requirement (task 8.7); `infra/` does not yet model those. A live preflight on
@@ -71,7 +74,7 @@ account immediately rather than adding it to the persistent foundation.
 | **One delivery, minimum modeled foundation** | **$0.141** | Three-hour environment: 3 hours of the configured share ($0.068808), 15 minutes of the verification VM ($0.066250), and 3 hours of its 32 GiB OS disk ($0.006312). This assumes the deployment script deallocates the VM after its in-network setup. It excludes private endpoints, payload/operations, and every unsized workload service. |
 | **Idle per day, minimum modeled foundation** | **$0.601/day** | Configured provisioned-v2 SSD share: `24 × $0.022936 = $0.550464`; 32 GiB OS disk: `24 × $0.002104 = $0.050496`. The share dominates this bounded total. |
 | **VM left running, additional daily exposure** | **$6.360/day** | `24 × $0.265` for the verification VM, before its disk and other usage charges. This is why `Deploy-Accelerator.ps1` deallocates a VM that it started. |
-| **Forecast for the `20260919` run against the $150 ceiling** | **≈ $0.14 delivery + $0.601/day idle** | At $0.601/day, the modeled foundation could stay up roughly 249 days before reaching $150 on idle storage cost alone; the ceiling is not at risk from this foundation while Purview stays undeployed. This excludes any HPC/Batch/Lustre work a dependent todo later adds, which must be forecast and approved separately before it runs. |
+| **Forecast for the `20260919` run against the $500 ceiling** | **≈ $0.14 delivery + $0.601/day idle** | At $0.601/day, the modeled foundation could stay up roughly 831 days before reaching $500 on idle storage cost alone; the ceiling is not at risk from this foundation while Purview stays undeployed. This excludes any HPC/Batch/Lustre/Purview/analytics-engine work a dependent todo later adds, which must be forecast and approved separately before it runs, and must stay within the remaining headroom below $500 total. |
 
 **Approval rule:** use the live Pricing Calculator/API and the planned runtime,
 payload, data-transfer, private-endpoint, disk, and service-capacity choices to

@@ -410,6 +410,13 @@ recorded authorization required by the design.
 keep the decision explicit. The runbook must identify the approver, required
 evidence, expected response time, and audit record for each gate. Configure
 multiple eligible reviewers so one unavailable reviewer does not block a demo.
+In this single-maintainer reference repository, no second reviewer identity
+is available: live testing demonstrated environment configuration, branch-ref
+refusal, and self-approval refusal (GitHub itself reports
+`current_user_can_approve: false` for the triggering user and rejects a
+self-approval attempt), but a completed approved-tag deployment carrying a
+distinct approver was not produced and is not claimed. A team deployment
+adds a second reviewer and exercises that final scenario for real.
 
 ### Failure recovery, reset, and teardown can require an operator
 
