@@ -73,6 +73,13 @@ demonstrates both cases.
 
 This module is local/reference evidence only. It does not implement or
 exercise a deployed notebook workspace or Fabric/Databricks SQL endpoint.
+Task 8.7 is therefore blocked: the current private Azure environment has
+storage, staging, processing, and verification-client paths, but no approved
+analytics engine or governed query endpoint with a private endpoint and
+private-DNS path. A private blob read or this local harness is not evidence
+for the missing query acceptance. Completion requires an approved engine,
+managed-identity grants, governed access policy, private connectivity, an
+authorized synthetic dataset, and an in-network query/audit check.
 All identifiers used by the harness and its tests are synthetic; no genomic
 payload is committed to the repository.
 

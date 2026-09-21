@@ -92,7 +92,7 @@
     },
     {
       "path": "docs/analytics-query.md",
-      "line": 126,
+      "line": 133,
       "boundary": "clinical-use",
       "rule": "clinical-output",
       "text": "“Exploratory AI-assisted analysis only; not a diagnosis, clinical",

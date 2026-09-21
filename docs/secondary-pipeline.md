@@ -259,9 +259,14 @@ rather than live execution:
 
 - The profile is credential-free, referencing a partition/queue by name/
   environment variable only.
-- It was not exercised against a live Slurm cluster in this delivery.
-  Validating it against a real Slurm/Managed Lustre HPC campaign is tracked
-  separately (task 5.3).
+- A live verification attempt on September 21, 2026 was blocked: `sbatch` was
+  unavailable on the execution host, and the authorized
+  `rg-genomics-20260919` resource group had no Slurm/CycleCloud cluster and no
+  Azure Managed Lustre filesystem. It contained Azure Batch, storage,
+  networking, and verification-VM resources only.
+- Therefore, the profile was not exercised against a live Slurm/Managed Lustre
+  campaign. Task 5.3 remains open until an authorized Slurm cluster, Lustre
+  capacity/network path, and campaign access are available.
 
 ## Manual verification evidence
 
