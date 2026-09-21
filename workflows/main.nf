@@ -30,6 +30,7 @@ params.read_count         = 12
 params.aligned_format      = 'bam'   // 'bam' or 'cram'
 params.variant_format      = 'vcf'   // 'vcf' or 'gvcf'
 params.force_fail_stage    = null    // 'quality_control' | 'alignment' | 'variant_calling'
+params.input_bundle_dir    = null
 params.outdir              = 'results'
 params.workflow_id         = 'genomics-secondary-analysis'
 params.workflow_version    = 'v0.1.0'
@@ -53,6 +54,23 @@ process GENERATE_DEMO_SAMPLE {
         --reference-version ${params.reference_version} \
         --sample-id ${params.sample_id} \
         --read-count ${params.read_count}
+    """
+}
+
+process STAGE_INPUT_BUNDLE {
+    publishDir "${params.outdir}/inputs", mode: 'copy'
+
+    input:
+    val bundle_dir
+
+    output:
+    tuple path('sample_manifest.json'), path('*.fastq'), path('reference.fasta'), emit: bundle
+
+    script:
+    """
+    cp ${bundle_dir}/sample_manifest.json .
+    cp ${bundle_dir}/*.fastq .
+    cp ${bundle_dir}/reference.fasta .
     """
 }
 
@@ -136,8 +154,17 @@ workflow {
     if( params.force_fail_stage && !(params.force_fail_stage in VALID_STAGES) )
         exit 1, "force_fail_stage must be one of ${VALID_STAGES} or unset."
 
-    sample = GENERATE_DEMO_SAMPLE()
-    qc = QUALITY_CONTROL(sample.bundle)
+    def sample_bundle
+    if( params.input_bundle_dir ) {
+        def bundleDir = file(params.input_bundle_dir)
+        if( !bundleDir.exists() )
+            exit 1, "input_bundle_dir ${params.input_bundle_dir} does not exist."
+        sample_bundle = STAGE_INPUT_BUNDLE(params.input_bundle_dir).bundle
+    } else {
+        sample_bundle = GENERATE_DEMO_SAMPLE().bundle
+    }
+
+    qc = QUALITY_CONTROL(sample_bundle)
     aligned = ALIGN_READS(qc.bundle)
     variants = CALL_VARIANTS(aligned.bundle)
     PUBLISH_RESULTS(qc.report, aligned.aligned, variants.variants)
