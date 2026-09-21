@@ -244,6 +244,41 @@ run, the pool's autoscale policy (evaluated every `PT5M`) drained back to
 running (or billing) continuously (see task 5.7 in
 `openspec/changes/add-genomics-variant-accelerator/tasks.md`).
 
+### Burst-concurrency compute release evidence (task 5.7)
+
+Task 5.7 required stronger evidence than the single successful run above: the
+pool had to scale for a **concurrent burst** and then return to zero only after
+those runs reached terminal state. On September 21, 2026, two independent
+Azure Batch profile runs (`azure-batch-burst-001`, `azure-batch-burst-002`)
+were launched in parallel from the same verification VM, each with a distinct
+`--run_id` and isolated `az://batch-work/nextflow-work/<run_id>` work path.
+Both runs completed successfully at `2026-09-21T13:46:23Z`, and each published
+the expected BAM, BAI, VCF, QC report, reference FASTA, manifest, and paired
+FASTQ inputs back onto the VM under `/root/batch-burst/<run_id>/results`.
+
+Live pool polling during that burst showed the autoscale policy allocate real
+concurrent capacity, not just reuse the single-run evidence from task 5.2:
+
+- `2026-09-21T13:43:27Z`: `currentDedicatedNodes: 2`,
+  `targetDedicatedNodes: 2`, `allocationState: steady`,
+  `autoScaleRun.results = $TargetDedicatedNodes=2; ...; $tasks=2`
+- `2026-09-21T13:47:35Z`: `currentDedicatedNodes: 2`,
+  `targetDedicatedNodes: 1`, `allocationState: resizing`,
+  `autoScaleRun.results = $TargetDedicatedNodes=1; ...; $tasks=1.6`
+- `2026-09-21T13:48:08Z`: `currentDedicatedNodes: 1`,
+  `targetDedicatedNodes: 1`, `allocationState: steady`
+- `2026-09-21T13:52:34Z`: `currentDedicatedNodes: 1`,
+  `targetDedicatedNodes: 0`, `allocationState: resizing`,
+  `autoScaleRun.results = $TargetDedicatedNodes=0; ...; $tasks=0`
+- `2026-09-21T13:53:08Z`: `currentDedicatedNodes: 0`,
+  `targetDedicatedNodes: 0`, `allocationState: steady`
+
+That sequence demonstrates the contract in the secondary-analysis spec's
+"Elastic compute allocation" requirement: concurrent submissions caused the
+pool to allocate two dedicated nodes, and the same pool released them back to
+zero after the burst had fully drained. The verification VM used to submit the
+burst was deallocated again afterwards to avoid idle VM cost.
+
 `scripts/run_nextflow_secondary_pipeline.py` still hardcodes
 `-profile standard` and does not yet parametrize `-profile azure_batch`;
 this run's provenance was recorded directly against
