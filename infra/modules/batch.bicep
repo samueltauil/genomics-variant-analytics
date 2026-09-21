@@ -12,7 +12,7 @@ param accountName string
 param storageAccountName string
 
 param poolName string = 'secondary-analysis-pool'
-param poolVmSize string = 'Standard_D2s_v5'
+param poolVmSize string = 'Standard_D2s_v3'
 param subnetId string
 param batchIdentityResourceId string
 param batchIdentityPrincipalId string
@@ -163,6 +163,19 @@ resource batchOperator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', batchAccountContributorRoleId)
     principalId: deployerPrincipalId
+  }
+}
+
+// The batch identity itself submits jobs/tasks and reads pool state when a
+// workflow engine (e.g. Nextflow) runs under its managed identity, which is
+// a distinct principal from the interactive deployer above.
+resource batchIdentityOperator 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: account
+  name: guid(account.id, batchIdentityPrincipalId, batchAccountContributorRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', batchAccountContributorRoleId)
+    principalId: batchIdentityPrincipalId
+    principalType: 'ServicePrincipal'
   }
 }
 
