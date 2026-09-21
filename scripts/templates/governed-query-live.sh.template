@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+workdir="/home/__VM_USERNAME__/private-query-live"
+mkdir -p "$workdir"
+cd "$workdir"
+
+imds_token() {
+  local resource="$1"
+  local client_id="$2"
+  curl -s -m 30 -H Metadata:true \
+    "http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=${resource}&client_id=${client_id}" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin)["access_token"])'
+}
+
+upload_blob() {
+  local account="$1"
+  local container="$2"
+  local path="$3"
+  local file="$4"
+  local token="$5"
+  curl -sS --fail -X PUT \
+    -H "Authorization: Bearer ${token}" \
+    -H "x-ms-version: 2023-11-03" \
+    -H "x-ms-date: $(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S GMT')" \
+    -H "x-ms-blob-type: BlockBlob" \
+    -H "Content-Type: application/octet-stream" \
+    --data-binary "@${file}" \
+    "https://${account}.blob.core.windows.net/${container}/${path}" >/dev/null
+}
+
+python3 - <<'PY'
+import base64
+from pathlib import Path
+
+Path("variants.csv").write_bytes(base64.b64decode("__VARIANT_DATA_BASE64__"))
+Path("manifest.json").write_bytes(base64.b64decode("__MANIFEST_DATA_BASE64__"))
+PY
+
+storage_token="$(imds_token "https%3A%2F%2Fstorage.azure.com%2F" "__STAGING_CLIENT_ID__")"
+upload_blob "__LAKE_ACCOUNT__" "__LAKE_FILESYSTEM__" "__DATASET_RELATIVE_PATH__" "variants.csv" "$storage_token"
+upload_blob "__LAKE_ACCOUNT__" "__LAKE_FILESYSTEM__" "__MANIFEST_RELATIVE_PATH__" "manifest.json" "$storage_token"
+
+systemctl restart governed-query.service
+for attempt in $(seq 1 20); do
+  if curl -sSf "__LOCAL_SERVICE_URL__/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 2
+done
+python3 - <<'PY'
+import json
+import urllib.request
+from pathlib import Path
+
+base = "__LOCAL_SERVICE_URL__"
+
+def get_json(path):
+    with urllib.request.urlopen(base + path, timeout=60) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+success = get_json("/query?principal=deidentified-analyst&gene=GENE1")
+
+denied_request = urllib.request.Request(
+    base + "/query?principal=deidentified-analyst&gene=GENE1&include_subject_linkage=true"
+)
+try:
+    with urllib.request.urlopen(denied_request, timeout=60) as response:
+        denied_status = response.status
+        denied_payload = json.loads(response.read().decode("utf-8"))
+except urllib.error.HTTPError as error:
+    denied_status = error.code
+    denied_payload = json.loads(error.read().decode("utf-8"))
+
+audit = get_json("/audit?limit=5")
+health = get_json("/health")
+
+result = {
+    "captured_at_utc": health["captured_at_utc"],
+    "service_base_url": base,
+    "dataset_blob_uri": "https://__LAKE_ACCOUNT__.blob.core.windows.net/__LAKE_FILESYSTEM__/__DATASET_RELATIVE_PATH__",
+    "manifest_blob_uri": "https://__LAKE_ACCOUNT__.blob.core.windows.net/__LAKE_FILESYSTEM__/__MANIFEST_RELATIVE_PATH__",
+    "reference_version_or_digest": "__REFERENCE_VERSION_OR_DIGEST__",
+    "query_text": success["query"],
+    "governed_row_count": success["row_count"],
+    "query_rows": success["rows"],
+    "denied_status": denied_status,
+    "denied_payload": denied_payload,
+    "audit_rows": audit["rows"],
+}
+
+Path("result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
+print("BEGIN_GOVERNED_QUERY_RESULT")
+print(json.dumps(result, indent=2))
+print("END_GOVERNED_QUERY_RESULT")
+PY
