@@ -1,0 +1,12 @@
+{
+  "dataset_id": "SYN-GOVERNED-QUERY-DATASET-001",
+  "classification": "de-identified-genomic-variant",
+  "reference": {
+    "build": "GRCh38",
+    "version_or_digest": "manifest-sha256:synthetic-reference-001"
+  },
+  "pipeline_version": "release-1.0.0-live",
+  "records_path": "SampleData/Genomics/private-query/task-8-7/synthetic-governed-variants.csv",
+  "record_count": 4,
+  "contains_phi": false
+}

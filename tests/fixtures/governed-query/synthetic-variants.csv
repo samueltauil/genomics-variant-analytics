@@ -1,0 +1,5 @@
+CHROM,POS,ID,REF,ALT,QUAL,FILTER,INFO,sample_id,research_subject_id,cohort_id,gene,transcript,variant_consequence,genotype,allele_frequency,reference_build,pipeline_version,source_file_uri,ingestion_timestamp
+1,101,SYN-VAR-001,A,G,99,PASS,GENE=GENE1,SYN-SAMPLE-A,SYN-SUBJECT-A,SYN-COHORT-A,GENE1,TX-001,missense_variant,0/1,0.42,GRCh38,release-1.0.0-live,abfss://synthetic/vcf/run-a.vcf,2026-09-21T13:00:00Z
+1,202,SYN-VAR-002,C,T,12,q10,GENE=GENE1,SYN-SAMPLE-A,SYN-SUBJECT-A,SYN-COHORT-A,GENE1,TX-001,synonymous_variant,0/1,0.05,GRCh38,release-1.0.0-live,abfss://synthetic/vcf/run-a.vcf,2026-09-21T13:00:00Z
+1,101,SYN-VAR-001,A,G,99,PASS,GENE=GENE1,SYN-SAMPLE-B,SYN-SUBJECT-B,SYN-COHORT-B,GENE1,TX-001,missense_variant,1/1,0.42,GRCh38,release-1.0.0-live,abfss://synthetic/vcf/run-b.vcf,2026-09-21T13:05:00Z
+1,303,SYN-VAR-003,G,A,80,PASS,GENE=GENE2,SYN-SAMPLE-A,SYN-SUBJECT-A,SYN-COHORT-A,GENE2,TX-002,missense_variant,0/1,0.11,GRCh38,release-0.9.0-live,abfss://synthetic/vcf/run-c.vcf,2026-09-21T13:10:00Z
