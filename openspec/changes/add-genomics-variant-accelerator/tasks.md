@@ -95,7 +95,19 @@ private check returned HTTP 200 and tier `Hot`. Azure has not yet performed its
 service-scheduled transition, so the task remains open until a later check
 returns `Cool` while the same URI still resolves.
 
-- [ ] 3.5 Configure private-compatible blob-side lifecycle tiering on staged artifacts using conditions supported by the selected account, and verify an artifact past the age threshold transitions tier while its URI and lineage link still resolve
+Task 3.5 transition confirmation (2026-09-21): a later run of
+[`scripts/Test-LifecycleTransition.ps1`](../../../scripts/Test-LifecycleTransition.ps1)
+against the same object
+(`https://stglaketgrxjnw6usjfg.dfs.core.windows.net/healthcare/Ingest/LifecycleAcceptance/lifecycle-20260920T025447Z.txt`)
+returned `httpStatus: "200"`, `accessTier: "Cool"`, and `transitioned: true` at
+`2026-09-21T12:33:42Z` -- the account-native management policy moved the
+object from Hot to Cool with no blob index tags and no Storage Actions
+dependency, while the same private URI continued to resolve and the
+synthetic lineage source link remained intact. This closes the task with a
+live tier-transition observation rather than partial (policy-deployed-only)
+evidence.
+
+- [x] 3.5 Configure private-compatible blob-side lifecycle tiering on staged artifacts using conditions supported by the selected account, and verify an artifact past the age threshold transitions tier while its URI and lineage link still resolve
 
 ## 4. Reference data
 
