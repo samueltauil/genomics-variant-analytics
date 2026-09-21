@@ -46,7 +46,7 @@ The share's first 3,000 IOPS and first 100 MiB/s are zero-priced in the
 retrieved meter set. The table therefore charges only the 100 MiB/s above the
 included throughput, and no IOPS increment.
 
-## Purview: priced but not deployed (task 3.4)
+## Purview: live-tested, then torn down again (task 3.4 remains blocked)
 
 Retail Purview meters (`eastus2`, retrieved 2026-09-19) show the Data Map
 starts at one capacity unit and bills continuously while the account exists,
@@ -57,18 +57,21 @@ other resource in this model, which is either usage-based or already
 deallocated between uses. This foundation is authorized to stay up for
 dependent HPC/end-to-end work of unknown duration, so an always-on $9.86/day
 liability is material against the $500 ceiling if left running by mistake.
-Deploying Purview would also require private endpoints and DNS zones for the
-account/portal/ingestion endpoints to satisfy the "public data-plane disabled"
-requirement (task 8.7); `infra/` does not yet model those. A live preflight on
-September 21, 2026 confirmed the immediate environment blocker: the
-`Microsoft.Purview` provider is `NotRegistered`, no Purview account exists in
-the disposable resource group, and the Azure CLI Purview extension is not
-installed. Task 3.4 therefore remains unchecked. This is an environment and
-infrastructure-readiness blocker, not evidence that Purview lineage is
-infeasible in principle. A future authorized attempt should first add and
-review the private account/endpoints/DNS deployment, then provision Purview in
-its own short-lived deployment, capture lineage evidence, and delete the
-account immediately rather than adding it to the persistent foundation.
+An authorized live attempt on September 21, 2026 cleared the original
+readiness blockers: `Microsoft.Purview` was registered, the CLI extension was
+installed, and a short-lived private account plus temporary account/platform
+private endpoints, DNS zones, and Data Factory managed private endpoints were
+deployed from `infra/purview-lineage-live.bicep`. Two real Copy runs then
+succeeded, but the second activity output still reported
+`reportLineageToPurview.status = "CannotConnect"` / `The catalog provided for
+lineage reporting cannot be connected, please check the catalog uri and network
+connection.` Matching Atlas lookups over the private endpoint from the
+verification VM never produced the expected staged sink asset or `adf_copy_activity`
+entity, so task 3.4 remains unchecked for a live product-integration reason,
+not because the environment was unprepared. The Purview account, Purview-only
+private endpoints/DNS, and temporary Data Factory Purview wiring were deleted
+immediately after evidence capture, so the standing ~$9.86/day charge is not
+left running in the disposable environment.
 
 ## Decision figures
 

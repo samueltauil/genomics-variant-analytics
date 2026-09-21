@@ -79,6 +79,7 @@ def _failing_stage_from_log(log_path: Path) -> str | None:
 
 def run(*, run_id: str, work_dir: Path, provenance_db: Path,
         reference_build: str = "SYN-demo-genome", reference_version: str = "synthetic-1385e2e921c4",
+        profile: str = "standard", input_bundle_dir: Path | None = None,
         execution_target: str = "local", compute_pool: str = "local-dev",
         aligned_format: str = "bam", variant_format: str = "vcf",
         force_fail_stage: str | None = None) -> dict:
@@ -90,12 +91,14 @@ def run(*, run_id: str, work_dir: Path, provenance_db: Path,
     start_time = _utc_now()
     mode, nextflow_bin = _resolve_nextflow()
     args = [
-        "run", str(project_dir / "main.nf"), "-profile", "standard",
+        "run", str(project_dir / "main.nf"), "-profile", profile,
         "--run_id", run_id, "--reference_build", reference_build,
         "--reference_version", reference_version,
         "--aligned_format", aligned_format, "--variant_format", variant_format,
         "--outdir", str(outdir),
     ]
+    if input_bundle_dir:
+        args += ["--input_bundle_dir", str(Path(input_bundle_dir).resolve())]
     if force_fail_stage:
         args += ["--force_fail_stage", force_fail_stage]
 
@@ -176,6 +179,8 @@ def main(argv=None) -> int:
     parser.add_argument("--provenance-db", type=Path, required=True)
     parser.add_argument("--reference-build", default="SYN-demo-genome")
     parser.add_argument("--reference-version", default="synthetic-1385e2e921c4")
+    parser.add_argument("--profile", default="standard")
+    parser.add_argument("--input-bundle-dir", type=Path)
     parser.add_argument("--execution-target", default="local")
     parser.add_argument("--compute-pool", default="local-dev")
     parser.add_argument("--aligned-format", choices=("bam", "cram"), default="bam")
@@ -188,6 +193,7 @@ def main(argv=None) -> int:
             run_id=arguments.run_id, work_dir=arguments.work_dir,
             provenance_db=arguments.provenance_db, reference_build=arguments.reference_build,
             reference_version=arguments.reference_version,
+            profile=arguments.profile, input_bundle_dir=arguments.input_bundle_dir,
             execution_target=arguments.execution_target, compute_pool=arguments.compute_pool,
             aligned_format=arguments.aligned_format, variant_format=arguments.variant_format,
             force_fail_stage=arguments.force_fail_stage,
