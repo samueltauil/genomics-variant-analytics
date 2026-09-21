@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "review_date": "2026-09-19",
+  "review_date": "2026-09-21",
   "reviewer": "automated repository positioning review",
   "claim_register": "docs/claim-register.md",
   "claim_register_sha256": "8e95e898d199cc3a2031c10fa524c69ff97bfd4692969112d37b8cdf6dfa7817",
@@ -92,7 +92,7 @@
     },
     {
       "path": "docs/analytics-query.md",
-      "line": 126,
+      "line": 133,
       "boundary": "clinical-use",
       "rule": "clinical-output",
       "text": "“Exploratory AI-assisted analysis only; not a diagnosis, clinical",

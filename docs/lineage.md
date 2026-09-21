@@ -20,6 +20,19 @@ variant, producing run, VCF artifact, staged artifact, landing file, metadata
 chain, and catalog context. `forward_trace` accepts a landing-zone path and
 returns the verified staged artifact and all derived pipeline/variant records.
 
+## Live Purview status
+
+The September 21, 2026 Purview acceptance attempt is blocked, not passed. The
+disposable Azure environment has no Purview account or private Purview
+endpoint/DNS scaffolding, and the subscription reports the `Microsoft.Purview`
+resource provider as `NotRegistered`. The Azure CLI Purview extension is also
+not installed. Consequently, this repository makes no claim that Copy activity
+lineage is visible in a live catalog or that a catalog item resolves to the
+landing-zone source. The next authorized attempt must provision the private
+network path, register the Data Factory and ADLS sources, verify the
+Files-to-ADLS lineage hop and source resolution, and remove the short-lived
+Purview account afterward.
+
 Both directions require governed variant-store access. Subject identifiers and
 subject entities are returned only when the caller has the `subject_linkage`
 capability. Raw content readability is reported separately and requires the
