@@ -43,6 +43,9 @@ param deployStorageActions bool = true
 @description('Deploy the Azure Container Registry used for release pipeline images and attestations.')
 param deployContainerRegistry bool = true
 
+@description('Deploy the managed-identity Azure Batch execution target.')
+param deployBatch bool = false
+
 @minValue(0)
 @description('Age in days after last modification before staged Ingest artifacts tier from Hot to Cool through the account-native lifecycle policy.')
 param lifecycleTierAfterDays int = 1
@@ -215,6 +218,51 @@ module containerRegistry 'modules/container-registry.bicep' = if (deployContaine
     tags: tags
     name: 'acrgen${suffix}'
     pipelinePrincipalId: identities.outputs.pipelinePrincipalId
+    batchPrincipalId: identities.outputs.batchPrincipalId
+  }
+}
+
+module batch 'modules/batch.bicep' = if (deployBatch) {
+  scope: environment
+  name: 'secondary-analysis-batch'
+  params: {
+    location: location
+    tags: tags
+    accountName: 'batchgen${suffix}'
+    storageAccountName: 'stgbatch${suffix}'
+    subnetId: network.outputs.computeSubnetId
+    batchIdentityResourceId: identities.outputs.batchResourceId
+    batchIdentityPrincipalId: identities.outputs.batchPrincipalId
+    deployerPrincipalId: deployerPrincipalId
+    containerRegistryLoginServer: deployContainerRegistry ? containerRegistry!.outputs.loginServer : ''
+  }
+}
+
+module batchStorageBlobLink 'modules/private-endpoint.bicep' = if (deployBatch) {
+  scope: environment
+  name: 'private-link-batch-blob'
+  params: {
+    location: location
+    tags: tags
+    name: 'pe-${batch!.outputs.storageAccountName}-blob'
+    subnetId: network.outputs.privateEndpointSubnetId
+    serviceId: batch!.outputs.storageAccountId
+    groupId: 'blob'
+    privateDnsZoneId: network.outputs.blobZoneId
+  }
+}
+
+module batchStorageDfsLink 'modules/private-endpoint.bicep' = if (deployBatch) {
+  scope: environment
+  name: 'private-link-batch-dfs'
+  params: {
+    location: location
+    tags: tags
+    name: 'pe-${batch!.outputs.storageAccountName}-dfs'
+    subnetId: network.outputs.privateEndpointSubnetId
+    serviceId: batch!.outputs.storageAccountId
+    groupId: 'dfs'
+    privateDnsZoneId: network.outputs.dfsZoneId
   }
 }
 
@@ -232,8 +280,14 @@ output referenceContainer string = lake.outputs.referenceContainerName
 output lifecyclePolicyName string = lake.outputs.lifecyclePolicyName
 output stagingIdentityClientId string = identities.outputs.stagingClientId
 output pipelineIdentityClientId string = identities.outputs.pipelineClientId
+output batchIdentityClientId string = identities.outputs.batchClientId
 output ingestionIdentityClientId string = identities.outputs.ingestionClientId
 output storageActionsTaskName string = deployStorageActions ? storageActions!.outputs.taskName : ''
 output storageActionsAssignmentName string = deployStorageActions ? storageActions!.outputs.assignmentName : ''
 output containerRegistryName string = deployContainerRegistry ? containerRegistry!.outputs.name : ''
 output containerRegistryLoginServer string = deployContainerRegistry ? containerRegistry!.outputs.loginServer : ''
+output batchAccountName string = deployBatch ? batch!.outputs.accountName : ''
+output batchAccountEndpoint string = deployBatch ? batch!.outputs.accountEndpoint : ''
+output batchPoolName string = deployBatch ? batch!.outputs.poolName : ''
+output batchStorageAccount string = deployBatch ? batch!.outputs.storageAccountName : ''
+output batchWorkContainer string = deployBatch ? batch!.outputs.workContainerName : ''

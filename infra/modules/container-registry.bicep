@@ -8,8 +8,10 @@ param tags object
 param name string
 
 param pipelinePrincipalId string
+param batchPrincipalId string
 
 var acrPushRoleId = '8311e382-0749-4cb8-b61a-304f252e45ec'
+var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
 
 resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: name
@@ -50,6 +52,19 @@ resource pipelinePush 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
       acrPushRoleId
     )
     principalId: pipelinePrincipalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource batchPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: registry
+  name: guid(registry.id, batchPrincipalId, acrPullRoleId)
+  properties: {
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      acrPullRoleId
+    )
+    principalId: batchPrincipalId
     principalType: 'ServicePrincipal'
   }
 }

@@ -9,4 +9,5 @@ RUN chmod +x /usr/local/bin/call_variants.py \
     && touch /opt/pipeline/scripts/__init__.py
 
 ENV PYTHONPATH=/opt/pipeline
-ENTRYPOINT ["call_variants.py"]
+# No ENTRYPOINT: see quality-control.Dockerfile for why Nextflow's generated
+# shell wrapper must run directly rather than as an argument to an entrypoint.
