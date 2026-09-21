@@ -260,7 +260,7 @@
     },
     {
       "path": "docs/secondary-pipeline.md",
-      "line": 6,
+      "line": 7,
       "boundary": "released-blueprint",
       "rule": "released-offering",
       "text": "It is a demo solution accelerator artifact, not a Microsoft product, released",

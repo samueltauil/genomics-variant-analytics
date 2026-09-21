@@ -45,6 +45,9 @@ param(
     [Parameter(HelpMessage = 'Deploy the Azure Container Registry used by the release workflow.')]
     [bool] $DeployContainerRegistry = $true,
 
+    [Parameter(HelpMessage = 'Deploy the Azure Batch execution target and private work storage.')]
+    [bool] $DeployBatch = $false,
+
     [ValidateRange(0, 365)]
     [int] $LifecycleTierAfterDays = 1,
 
@@ -230,6 +233,7 @@ $parameters = @(
     "landingProvisionedBandwidthMibps=$ShareBandwidthMibps"
     "deployStorageActions=$($DeployStorageActions.ToString().ToLowerInvariant())"
     "deployContainerRegistry=$($DeployContainerRegistry.ToString().ToLowerInvariant())"
+    "deployBatch=$($DeployBatch.ToString().ToLowerInvariant())"
     "lifecycleTierAfterDays=$LifecycleTierAfterDays"
     "storageActionsTierBeforeDateUtc=$storageActionsTierBeforeDateUtc"
     "storageActionsVerificationRunStartUtc=$storageActionsVerificationRunStartUtc"
@@ -403,10 +407,16 @@ $environment = [ordered]@{
     storageActionsAssignment = $outputs.storageActionsAssignmentName.value
     containerRegistry        = $outputs.containerRegistryName.value
     containerRegistryLoginServer = $outputs.containerRegistryLoginServer.value
+    batchAccount          = $outputs.batchAccountName.value
+    batchAccountEndpoint  = $outputs.batchAccountEndpoint.value
+    batchPool             = $outputs.batchPoolName.value
+    batchStorageAccount   = $outputs.batchStorageAccount.value
+    batchWorkContainer    = $outputs.batchWorkContainer.value
     identities        = [ordered]@{
         ingestion = $outputs.ingestionIdentityClientId.value
         staging   = $outputs.stagingIdentityClientId.value
         pipeline  = $outputs.pipelineIdentityClientId.value
+        batch     = $outputs.batchIdentityClientId.value
     }
 }
 

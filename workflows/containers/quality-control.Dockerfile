@@ -9,4 +9,7 @@ RUN chmod +x /usr/local/bin/quality_control.py \
     && touch /opt/pipeline/scripts/__init__.py
 
 ENV PYTHONPATH=/opt/pipeline
-ENTRYPOINT ["quality_control.py"]
+# No ENTRYPOINT: Nextflow invokes the staged script on PATH via its own
+# generated shell wrapper (.command.run) inside the container. Setting an
+# ENTRYPOINT here would swallow that wrapper invocation as an argument to the
+# entrypoint binary instead of letting the container shell run it directly.
