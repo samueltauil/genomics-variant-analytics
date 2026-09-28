@@ -1,6 +1,5 @@
 """Workflow submission boundary with mandatory published-reference validation."""
 
-import hashlib
 import json
 import re
 
@@ -71,7 +70,7 @@ def _resolve_reference(zone, key):
     return {
         **resolved_entry,
         "manifest_uri": zone.uri(entry),
-        "manifest_sha256": hashlib.sha256(payload).hexdigest(),
+        "manifest_sha256": digest(json.loads(payload, object_pairs_hook=unique_object)),
         "artifacts": [
             {
                 "filename": artifact["filename"],
@@ -89,6 +88,10 @@ def prepare_workflow_submission(request, compatibility, reference_zone):
     requested = validate_request_compatibility(request, compatibility)
     references = [_resolve_reference(reference_zone, key) for key in sorted(requested)]
     genome = next(reference for reference in references if reference["type"] == "genome")
+    if genome["manifest_sha256"] != request["reference_manifest_sha256"]:
+        raise ValueError(
+            "Published genome reference manifest digest does not match the submission."
+        )
     return {
         "schema_version": 1,
         "run_id": request["run_id"],
@@ -96,6 +99,7 @@ def prepare_workflow_submission(request, compatibility, reference_zone):
         "workflow_version": request["workflow_version"],
         "reference_build": genome["name"],
         "reference_version": genome["version"],
+        "reference_manifest_sha256": genome["manifest_sha256"],
         "references": references,
         "compatibility_manifest_sha256": digest(compatibility),
     }

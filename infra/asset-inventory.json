@@ -73,8 +73,8 @@
       "id": "hpc",
       "tasks": ["5.3", "5.7"],
       "dependsOn": ["object-storage", "container-registry"],
-      "deliverables": ["Separate Slurm campaign infrastructure", "Ephemeral Azure Managed Lustre scratch with HSM import/export", "Nextflow executor and campaign teardown definitions"],
-      "openDecisions": ["Slurm/CycleCloud topology, images and quota", "Lustre capacity, SKU, subnet and campaign lifecycle"]
+      "deliverables": ["Private TrustedLaunchSupported Azure Compute Gallery image built through Azure VM Image Builder", "Microsoft prebuilt signed AMLFS kmod with Secure Boot and vTPM retained", "Separate Slurm campaign infrastructure", "Ephemeral Azure Managed Lustre scratch with managed-identity Blob stage-in/copy-out", "Nextflow executor and guarded campaign teardown definitions"],
+      "openDecisions": ["Commit and publish the audited Slurm runtime interface before a live immutable image build", "Lustre capacity, SKU and regional campaign availability"]
     },
     {
       "id": "analytics",

@@ -22,6 +22,7 @@ def main() -> int:
     parser.add_argument("--workflow-version", required=True)
     parser.add_argument("--reference-build", required=True)
     parser.add_argument("--reference-version", required=True)
+    parser.add_argument("--reference-manifest-sha256", required=True)
     parser.add_argument("--execution-target", required=True)
     parser.add_argument("--compute-pool", required=True)
     parser.add_argument("--input-uris", required=True, help="JSON array of input URIs")
@@ -40,6 +41,7 @@ def main() -> int:
         "workflow_version": arguments.workflow_version,
         "reference_build": arguments.reference_build,
         "reference_version": arguments.reference_version,
+        "reference_manifest_sha256": arguments.reference_manifest_sha256,
         "execution_target": arguments.execution_target,
         "compute_pool": arguments.compute_pool,
         "input_uris": json.loads(arguments.input_uris),

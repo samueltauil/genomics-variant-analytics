@@ -1,0 +1,85 @@
+{
+  "captured_at_utc": "2026-09-27T04:01:46Z",
+  "region": "eastus2",
+  "subscription": "<authorized-disposable-subscription>",
+  "reference_gate": {
+    "workflow_id": "genomics-secondary-analysis",
+    "workflow_version": "v0.1.0",
+    "reference_build": "SYN-demo-genome",
+    "reference_version": "synthetic-1385e2e921c4",
+    "reference_manifest_sha256": "7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83",
+    "focused_tests_passed": 47,
+    "validated_before_campaign_allocation": true,
+    "campaign_resources_created": false
+  },
+  "static_validation": {
+    "hpc_campaign_tests_passed": 9,
+    "relevant_bicep_builds_passed": [
+      "infra/hpc-campaign.bicep",
+      "infra/main.bicep"
+    ],
+    "python_compile_passed": true,
+    "reference_json_validation_passed": true,
+    "git_diff_check_passed": true
+  },
+  "live_preflight": {
+    "azure_context_authorized": true,
+    "amlfs_region_available": true,
+    "amlfs_quota": {
+      "current": 0,
+      "limit": 4
+    },
+    "campaign_vm_sku_available": true,
+    "required_private_slurm_image_present": false
+  },
+  "private_image_attempt": {
+    "resource_group": "<disposable-image-builder-group>",
+    "vm": "<disposable-image-builder-vm>",
+    "public_ip": false,
+    "network_path": "<existing-private-compute-subnet>",
+    "base_image": "Canonical Ubuntu 24.04 LTS",
+    "trusted_launch": true,
+    "vtpm_enabled": true,
+    "secure_boot_disabled_for_dkms": true,
+    "amlfs_client": {
+      "install_method": "Microsoft AMLFS DKMS package",
+      "version": "2.17.0_24_gf517bc4",
+      "compiled_for_kernel": "6.17.0-1022-azure",
+      "mount_lustre_present": true
+    },
+    "terminal_state": "blocked",
+    "blocker": "After the Secure Boot transition, Azure kept the disposable builder VM in ProvisioningState/updating and stop/start plus guest run-command operations did not reach a stable terminal state. A trustworthy private image could not be captured, so the campaign preflight requirement was not bypassed."
+  },
+  "campaign_acceptance": {
+    "campaign_resources_created": false,
+    "amlfs_created": false,
+    "managed_identity_stage_in": false,
+    "workflow_used_mounted_lustre": false,
+    "workflow_terminal_success": false,
+    "managed_identity_copy_out": false,
+    "copy_out_integrity_verified": false,
+    "run_provenance_verified": false,
+    "task_5_3_complete": false
+  },
+  "cleanup": {
+    "builder_group_deleted": true,
+    "builder_group_exists_after_cleanup": false,
+    "campaign_tagged_resources_after_cleanup": [],
+    "image_builder_tagged_resources_after_cleanup": [],
+    "verified_at_utc": "2026-09-27T04:01:46Z"
+  },
+  "repository_fixes": [
+    "The campaign now performs guarded resource-group teardown in a finally path on success or failure.",
+    "The Slurm profile uses image-pinned host tools instead of unresolved Azure Batch ACR environment variables.",
+    "The campaign VM keeps Trusted Launch and vTPM but disables Secure Boot so the Microsoft AMLFS DKMS client can load."
+  ],
+  "redaction": {
+    "subscription_id": "not recorded",
+    "tenant_id": "not recorded",
+    "principal_ids": "not recorded",
+    "resource_ids": "not recorded",
+    "hostnames": "not recorded",
+    "private_ips": "not recorded",
+    "secrets": "not recorded"
+  }
+}

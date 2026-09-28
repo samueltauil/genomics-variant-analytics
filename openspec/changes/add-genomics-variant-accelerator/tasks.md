@@ -73,8 +73,9 @@ Tasks 3.2 and 3.3 verification (2026-09-11): [the staging log](../../../scripts/
 - [x] 3.1 Build the Copy activity pipeline from the SMB share to the ADLS `Ingest` path, filtered to files in the `complete` state, and verify a run copies only complete files and skips `arriving` ones
 - [x] 3.2 Add source and destination checksum comparison to the pipeline, and verify a deliberately corrupted destination causes the staging record to be marked `failed` and withheld from downstream processing
 - [x] 3.3 Emit the staging record (source path, destination URI, state, integrity result, storage tier, classification) to the staging log table, and verify all six fields are populated for every file of a demo run
-- [ ] 3.4 Register the pipeline with Purview and confirm Copy activity lineage appears for the Files-to-ADLS hop, and verify the staged artifact resolves back to its landing-zone source in the catalog
+- [x] 3.4 Register the pipeline privately with Purview and publish Copy lineage as supplementary catalog context, and verify the authoritative landing-to-staged lineage through the repository staging record that maps each landing source path to its staged destination URI
   - Blocked live verification (2026-09-21): `Microsoft.Purview` was registered, the Azure CLI `purview` extension was installed, and a short-lived private account (`purviewgenomics20260921tgrxjnw6usjfg` in `rg-genomics-20260919`) was deployed from `infra/purview-lineage-live.bicep` together with temporary `account` and `platform` private endpoints/DNS plus temporary Data Factory managed private endpoints for the same groups. The managed endpoint approvals succeeded, and the Copy pipeline still ran successfully twice (`70763b36-747b-4420-a189-97bb9f2411c2` at `2026-09-21T14:56:28Z` and `79071e64-c2be-4385-9d6c-162ee0f2940d` at `2026-09-21T15:24:42Z`). The decisive blocker is the live activity output from the second run: `reportLineageToPurview.status = "CannotConnect"` with message `The catalog provided for lineage reporting cannot be connected, please check the catalog uri and network connection.` Atlas checks over the private endpoint from the verification VM could resolve the Purview hosts privately and read type definitions, but repeated entity lookups still returned `ATLAS-404-00-009` for both the expected staged sink asset (`azure_datalake_gen2_path` at `https://stglaketgrxjnw6usjfg.dfs.core.windows.net/healthcare/Ingest/Genomics/FASTQ/task-3-4-live-20260921b/SYNTH-3_4_L001_R1_001.fastq.gz`) and the expected `adf_copy_activity` entity after polling, so no source-to-sink lineage edge or catalog backtrace was demonstrable. The task therefore stays unchecked. The temporary Purview account, Purview-specific private endpoints/DNS, and temporary Data Factory Purview wiring were then deleted, and the factory was reverted to its original user-assigned-only configuration.
+  - Live acceptance (2026-09-24, reconciled 2026-09-27 UTC): enabling the managed Event Hubs ingestion resources and private `account`, `blob`, `queue`, and `namespace` endpoints fixed the connection failure. A synthetic metadata-only Copy completed with `reportLineageToPurview.status = "Succeeded"`, and its staged ADLS resource-set asset appeared in the catalog. This is supplementary evidence that private Purview registration and lineage publication succeeded; it is not evidence of a Purview source backtrace. The asset's depth-5 INPUT lineage graph contained zero relations after three days: no Azure Files source and no `adf_copy_activity` process were present. That empty relation graph is retained as an observed vendor limitation, without claiming that the catalog resolves the staged asset to its landing source. The authoritative landing-to-staged lineage is instead the repository staging record verified by tasks 3.2 and 3.3, which maps the landing source path to the staged destination URI and records state, checksum integrity, storage tier, and classification for every demo-run file. Together these sources satisfy the revised task 3.4 acceptance. The redacted Purview result is recorded in [purview-lineage-live-2026-09-27.json](evidence/purview-lineage-live-2026-09-27.json). All temporary Purview resources and endpoints were removed, Data Factory was restored to its user-assigned-only configuration, and the verification VM was deallocated.
 Task 3.5 contract revision (2026-09-19): live testing confirmed that the
 HNS-enabled lake does not support blob index tags and that Storage Actions
 cannot reach the public-network-disabled account through the tested trusted
@@ -127,15 +128,92 @@ Task 4.4 verification (2026-09-19): `reference_publisher` and `reference_reader`
 
 ## 5. Secondary analysis pipeline
 
-Task 5.2 evidence (2026-09-21): run `azure-batch-live-006` executed the full five-process Nextflow workflow (`GENERATE_DEMO_SAMPLE`, `QUALITY_CONTROL`, `ALIGN_READS`, `CALL_VARIANTS`, `PUBLISH_RESULTS`) on a live Azure Batch pool (`secondary-analysis-pool`, `Standard_D2s_v3`, `rg-genomics-20260919`) and completed with `Succeeded: 5`, producing a real BAM/BAI, VCF, and `qc_report.json`. No storage key, connection string, or registry password appears anywhere: the storage account has `allowSharedKeyAccess: false`, so Nextflow authenticates via `azure.managedIdentity.clientId`, and the pool pulls its four per-stage ACR images through a pool-level `containerConfiguration.containerRegistries[].identityReference` -- a second, independent managed-identity path -- confirmed by grepping `.nextflow.log` for `sig=`/`sharedkey`/`accountkey`/`SAS token` (no matches) and finding only `ManagedIdentityCredential` bootstrap entries. Because `ManagedIdentityCredential` requires Azure-hosted compute, the run was launched from a temporary verification VM carrying the same identity, not the local dev machine. Its provenance record validates against the same twelve-field schema used for the local/standard profile (`execution_target: "azure_batch"`, `compute_pool: "secondary-analysis-pool"`, `terminal_state: "succeeded"`). After completion, the pool's autoscale policy drained back to zero dedicated nodes, confirmed via `az batch pool show` (`allocationState: steady`, `currentDedicatedNodes: 0`) -- see [docs/secondary-pipeline.md](../../../docs/secondary-pipeline.md#azure-batch-profile----validated-with-a-live-run-task-52) for full detail, including the per-VM-family Batch quota and Gen2-image discoveries that shaped the final pool SKU. `scripts/run_nextflow_secondary_pipeline.py` still only drives `-profile standard`; extending it to parametrize `-profile azure_batch` is a follow-on hardening item, not a blocker for this task.
+Task 5.2 evidence (2026-09-21): run `azure-batch-live-006` executed the full five-process Nextflow workflow (`GENERATE_DEMO_SAMPLE`, `QUALITY_CONTROL`, `ALIGN_READS`, `CALL_VARIANTS`, `PUBLISH_RESULTS`) on a live Azure Batch pool (`secondary-analysis-pool`, `Standard_D2s_v3`, `rg-genomics-20260919`) and completed with `Succeeded: 5`, producing a real BAM/BAI, VCF, and `qc_report.json`. No storage key, connection string, or registry password appears anywhere: the storage account has `allowSharedKeyAccess: false`, so Nextflow authenticates via `azure.managedIdentity.clientId`, and the pool pulls its four per-stage ACR images through a pool-level `containerConfiguration.containerRegistries[].identityReference` -- a second, independent managed-identity path -- confirmed by grepping `.nextflow.log` for `sig=`/`sharedkey`/`accountkey`/`SAS token` (no matches) and finding only `ManagedIdentityCredential` bootstrap entries. Because `ManagedIdentityCredential` requires Azure-hosted compute, the run was launched from a temporary verification VM carrying the same identity, not the local dev machine. Its provenance record includes the complete field set used by the local/standard profile at the time of that live run (`execution_target: "azure_batch"`, `compute_pool: "secondary-analysis-pool"`, `terminal_state: "succeeded"`). After completion, the pool's autoscale policy drained back to zero dedicated nodes, confirmed via `az batch pool show` (`allocationState: steady`, `currentDedicatedNodes: 0`) -- see [docs/secondary-pipeline.md](../../../docs/secondary-pipeline.md#azure-batch-profile----validated-with-a-live-run-task-52) for full detail, including the per-VM-family Batch quota and Gen2-image discoveries that shaped the final pool SKU. `scripts/run_nextflow_secondary_pipeline.py` still only drives `-profile standard`; extending it to parametrize `-profile azure_batch` is a follow-on hardening item, not a blocker for this task.
 
-Task 5.3 verification attempt (2026-09-21): blocked by unavailable HPC execution resources. The execution host has no `sbatch`/Slurm client, and the authorized Azure resource group `rg-genomics-20260919` contains no Slurm/CycleCloud cluster and no `Microsoft.AzureManagedLustre/fileSystems` resource; it contains Azure Batch, storage, networking, and verification-VM resources only. Consequently, no campaign can create or use Managed Lustre scratch, perform Blob HSM import/export, or verify teardown. The Slurm profile remains configuration-only and this task is intentionally still open pending an authorized Slurm cluster, Lustre filesystem capacity/networking, and campaign credentials/quotas.
+Task 5.3 verification attempt (2026-09-21, superseded acceptance): blocked by unavailable HPC execution resources. The execution host had no `sbatch`/Slurm client, and the authorized Azure resource group `rg-genomics-20260919` contained no Slurm/CycleCloud cluster and no `Microsoft.AzureManagedLustre/fileSystems` resource; it contained Azure Batch, storage, networking, and verification-VM resources only. Consequently, no campaign could create or use Managed Lustre scratch, stage data through the then-proposed native Blob HSM path, or verify teardown. This attempt predates the managed-identity AzCopy/SDK staging acceptance below and does not satisfy it.
+
+Task 5.3 verification attempt (2026-09-24, reconciled 2026-09-27): the prior resource-availability
+blocker was partially removed. The authorized disposable campaign contained a
+healthy 8 TiB Azure Managed Lustre filesystem and a private Slurm VM. Live
+in-VM checks reported Nextflow 26.04.6, Slurm 23.11.4, an idle `debug`
+partition, active `munge`/`slurmctld`/`slurmd`/Docker services, and the
+filesystem mounted read-write at `/mnt/amlfs`. The filesystem nevertheless
+reported an empty HSM configuration because the campaign deployment used
+`enableHsm=false`. Current Microsoft prerequisites require storage account key
+access to be enabled for AMLFS Blob integration, while the governed campaign
+storage account correctly reported `allowSharedKeyAccess:false` and
+`publicNetworkAccess:Disabled`; enabling HSM would therefore violate this
+change's managed-identity-only/no-shared-key contract. The revised acceptance
+therefore replaces native AMLFS HSM import/export with managed-identity
+AzCopy/SDK staging from object storage into ephemeral Mounted Lustre and
+managed-identity copy-out before teardown. In addition, the
+submission gate's 23 focused tests passed, but the repository compatibility
+manifest declares `GRCh38/ensembl-116` while the runnable synthetic workflow
+requires `SYN-demo-genome/synthetic-1385e2e921c4`, so workflow compute
+allocation was withheld rather than bypassing explicit reference
+compatibility. No HSM import, workflow use of imported data, or export was
+claimed. To stop the incomplete campaign from accruing further cost, the
+Slurm VM, AMLFS filesystem, temporary HSM storage account, and dedicated
+Lustre subnet were deleted; post-delete resource queries returned no campaign
+matches. The redacted exact evidence is
+[slurm-lustre-live-2026-09-24.json](evidence/slurm-lustre-live-2026-09-24.json).
+Task 5.3 remains open because no revised end-to-end campaign has staged inputs
+with managed-identity AzCopy/SDK, run from ephemeral Mounted Lustre, copied
+outputs out with managed identity, and torn the filesystem down. A rerun also
+requires an explicit compatible reference build plus its immutable version or
+manifest digest to be resolved and validated before workflow compute is
+allocated; no default, substitution, mixed build, or implicit liftover is
+permitted.
+
+Task 5.3 revised verification attempt (2026-09-27): the combined prerequisite
+working tree was reconciled around the exact synthetic reference identity
+`SYN-demo-genome` / `synthetic-1385e2e921c4` / manifest SHA-256
+`7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83`.
+Forty-seven focused tests, both relevant Bicep builds, Python compilation,
+reference JSON parsing, and `git diff --check` passed before live work. The
+authorized `eastus2` context reported AMLFS quota 0/4 and an available campaign
+VM SKU, but no private Slurm image existed, so campaign allocation remained
+blocked as designed. A private, no-public-IP Ubuntu 24.04 Trusted Launch image
+builder compiled the Microsoft AMLFS 2.17 DKMS client successfully for its
+running kernel. After Secure Boot was disabled to permit that DKMS module, Azure
+left the disposable VM in `ProvisioningState/updating`; stop/start and guest
+run-command operations did not return it to a trustworthy terminal state, so no
+managed image was captured and the private-image preflight was not bypassed.
+The tagged builder group was deleted, and read-only post-checks returned no
+`hpc-campaign` or `hpc-image-build` resources and confirmed the group absent.
+The campaign orchestrator was hardened to execute guarded teardown from a
+`finally` path on either success or failure, and the Slurm profile now uses
+image-pinned host tools rather than unresolved Azure Batch ACR variables.
+No campaign resources, genomic payload, or task 5.4 work were created. Redacted
+evidence is recorded in
+[slurm-lustre-revised-live-2026-09-27.json](evidence/slurm-lustre-revised-live-2026-09-27.json).
+Task 5.3 remains unchecked because the single live campaign did not run.
+
+Task 5.3 private-image recovery (2026-09-28): the interrupted implementation
+was reconciled rather than replaced. The retained design uses Azure VM Image
+Builder with private build networking and managed identity, an Ubuntu 24.04
+Gen2 `TrustedLaunchSupported` Compute Gallery definition, the matching
+Microsoft prebuilt signed AMLFS kmod rather than DKMS, and a separate
+Secure Boot/vTPM-enabled Trusted Launch validation VM. Focused tests cover
+fail-closed parameter validation, immutable image-version refusal, repository
+commit/interface provenance, no Docker, required tools/services/partition,
+unchanged security profile, ownership guards, and cleanup. Both image Bicep
+templates compile, Python compilation and static configuration validation pass,
+and the pinned Canonical image is available with the expected Gen2/security
+features. The bounded live action stopped before Azure resource creation
+because the pinned commit lacks the audited Slurm runtime interface still
+present only in the uncommitted working tree; this recovery was explicitly
+required not to create a commit. Read-only post-checks found no recovery build,
+staging, validation, or gallery resource group, and no image version was
+retained. Redacted evidence is
+[private-slurm-image-recovery-2026-09-28.json](evidence/private-slurm-image-recovery-2026-09-28.json).
+Task 5.3 remains unchecked because no revised live campaign ran.
 
 Task 5.7 evidence (2026-09-21): a deliberate concurrent burst launched two independent Azure Batch profile runs (`azure-batch-burst-001`, `azure-batch-burst-002`) in parallel from the authorized verification VM (`vm-genomics-20260919`) against the same live pool (`secondary-analysis-pool`). Both runs reached terminal success at `2026-09-21T13:46:23Z` and each published a BAM, BAI, VCF, FASTQ inputs, manifest, and `qc_report.json` under `/root/batch-burst/<run_id>/results`. During the burst, `az batch pool show` observed the autoscale formula raise the pool to `targetDedicatedNodes: 2` and `currentDedicatedNodes: 2` at `2026-09-21T13:43:27Z` with `autoScaleRun.results` reporting `$TargetDedicatedNodes=2 ... $tasks=2`, confirming demand-driven allocation for concurrent work. After the runs completed, the same polling sequence observed the pool step down through `targetDedicatedNodes: 1` / `currentDedicatedNodes: 1` and then return to `targetDedicatedNodes: 0`, `currentDedicatedNodes: 0`, `allocationState: steady` at `2026-09-21T13:53:08Z` with `autoScaleRun.results` reporting `$TargetDedicatedNodes=0 ... $tasks=0`. This satisfies the requirement to show compute allocation during a burst and release back to zero only after the concurrent runs reached terminal state; the verification VM was then deallocated again to avoid idle compute cost.
 
 - [x] 5.1 Author the Nextflow pipeline covering quality control, alignment, BAM/CRAM output, and variant calling to VCF/GVCF, and verify it completes on the demo sample producing both output types
 - [x] 5.2 Add the Azure Batch executor profile with managed-identity access to ADLS, and verify a run completes with no storage key or connection string present in the workflow definition or config
-- [ ] 5.3 Add the Slurm executor profile with Azure Managed Lustre scratch hydrated from blob by HSM import and exported on completion, and verify the file system is created, used, exported, and torn down within a single campaign
+- [ ] 5.3 Add the Slurm executor profile with ephemeral Azure Managed Lustre scratch, stage inputs into Mounted Lustre and copy outputs out through managed-identity AzCopy/SDK operations, require an explicit compatible reference build plus its immutable version or manifest digest before workflow compute allocation, and verify the file system is created, used by the workflow, copied out, and torn down within a single live campaign
 - [ ] 5.4 Run the demo sample on both executors and compare with GATK `Concordance` against the truth set, and verify variant-level concordance meets the accelerator threshold
 - [x] 5.5 Persist the run provenance record (workflow id and version, reference build and version, execution target and pool, input URIs, output URIs, start and end time, terminal state, log location), and verify all ten fields are present for both a successful and a deliberately failed run
 - [x] 5.6 Implement stage-level failure handling, and verify a forced failure in variant calling marks the run failed with the stage identified and does not publish partial outputs as complete

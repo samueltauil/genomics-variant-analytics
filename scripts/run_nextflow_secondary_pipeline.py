@@ -23,14 +23,23 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 try:
     from scripts.pipeline_provenance import record_run
+    from scripts.secondary_pipeline import (
+        validate_synthetic_reference_bundle,
+        validate_synthetic_reference_submission,
+    )
 except ModuleNotFoundError:
     from pipeline_provenance import record_run
+    from secondary_pipeline import (
+        validate_synthetic_reference_bundle,
+        validate_synthetic_reference_submission,
+    )
 
 
 WORKFLOW_ID = "genomics-secondary-analysis"
@@ -77,12 +86,55 @@ def _failing_stage_from_log(log_path: Path) -> str | None:
     return None
 
 
+def _validate_durable_uri(value: str | None, label: str) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    parsed = urlparse(normalized)
+    if (
+        not normalized
+        or parsed.scheme not in {"https", "az", "abfs", "abfss"}
+        or not parsed.netloc
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            f"{label} must be an absolute durable storage URI without query or fragment."
+        )
+    return normalized.rstrip("/")
+
+
+def _artifact_uris(directory: Path, durable_base_uri: str | None) -> list[str]:
+    paths = sorted(path for path in directory.glob("*") if path.is_file())
+    if durable_base_uri:
+        return [f"{durable_base_uri}/{quote(path.name)}" for path in paths]
+    return [path.resolve().as_uri() for path in paths]
+
+
 def run(*, run_id: str, work_dir: Path, provenance_db: Path,
-        reference_build: str = "SYN-demo-genome", reference_version: str = "synthetic-1385e2e921c4",
+        reference_build: str, reference_version: str, reference_manifest_sha256: str,
         profile: str = "standard", input_bundle_dir: Path | None = None,
         execution_target: str = "local", compute_pool: str = "local-dev",
         aligned_format: str = "bam", variant_format: str = "vcf",
-        force_fail_stage: str | None = None) -> dict:
+        force_fail_stage: str | None = None, input_uri_base: str | None = None,
+        output_uri_base: str | None = None, log_uri: str | None = None) -> dict:
+    validate_synthetic_reference_submission(
+        WORKFLOW_ID,
+        WORKFLOW_VERSION,
+        reference_build,
+        reference_version,
+        reference_manifest_sha256,
+    )
+    if input_bundle_dir:
+        validate_synthetic_reference_bundle(
+            input_bundle_dir,
+            reference_build,
+            reference_version,
+            reference_manifest_sha256,
+        )
+    input_uri_base = _validate_durable_uri(input_uri_base, "input_uri_base")
+    output_uri_base = _validate_durable_uri(output_uri_base, "output_uri_base")
+    log_uri = _validate_durable_uri(log_uri, "log_uri")
     work_dir = Path(work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
     outdir = work_dir / "results"
@@ -94,6 +146,7 @@ def run(*, run_id: str, work_dir: Path, provenance_db: Path,
         "run", str(project_dir / "main.nf"), "-profile", profile,
         "--run_id", run_id, "--reference_build", reference_build,
         "--reference_version", reference_version,
+        "--reference_manifest_sha256", reference_manifest_sha256,
         "--aligned_format", aligned_format, "--variant_format", variant_format,
         "--outdir", str(outdir),
     ]
@@ -132,9 +185,9 @@ def run(*, run_id: str, work_dir: Path, provenance_db: Path,
     failing_stage = None if succeeded else (_failing_stage_from_log(log_path) or STAGE_ORDER[-1])
 
     inputs_dir = outdir / "inputs"
-    input_uris = sorted(path.resolve().as_uri() for path in inputs_dir.glob("*")) if inputs_dir.exists() else []
+    input_uris = _artifact_uris(inputs_dir, input_uri_base) if inputs_dir.exists() else []
     output_uris = (
-        sorted(path.resolve().as_uri() for path in outdir.glob("*") if path.name != "inputs")
+        _artifact_uris(outdir, output_uri_base)
         if succeeded else []
     )
 
@@ -144,6 +197,7 @@ def run(*, run_id: str, work_dir: Path, provenance_db: Path,
         "workflow_version": WORKFLOW_VERSION,
         "reference_build": reference_build,
         "reference_version": reference_version,
+        "reference_manifest_sha256": reference_manifest_sha256,
         "execution_target": execution_target,
         "compute_pool": compute_pool,
         "input_uris": input_uris,
@@ -151,7 +205,9 @@ def run(*, run_id: str, work_dir: Path, provenance_db: Path,
         "start_time": start_time,
         "end_time": end_time,
         "terminal_state": "succeeded" if succeeded else "failed",
-        "log_location": log_path.resolve().as_uri() if log_path.exists() else work_dir.resolve().as_uri(),
+        "log_location": log_uri or (
+            log_path.resolve().as_uri() if log_path.exists() else work_dir.resolve().as_uri()
+        ),
         "failing_stage": failing_stage,
     }
 
@@ -177,8 +233,9 @@ def main(argv=None) -> int:
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--provenance-db", type=Path, required=True)
-    parser.add_argument("--reference-build", default="SYN-demo-genome")
-    parser.add_argument("--reference-version", default="synthetic-1385e2e921c4")
+    parser.add_argument("--reference-build", required=True)
+    parser.add_argument("--reference-version", required=True)
+    parser.add_argument("--reference-manifest-sha256", required=True)
     parser.add_argument("--profile", default="standard")
     parser.add_argument("--input-bundle-dir", type=Path)
     parser.add_argument("--execution-target", default="local")
@@ -187,16 +244,23 @@ def main(argv=None) -> int:
     parser.add_argument("--variant-format", choices=("vcf", "gvcf"), default="vcf")
     parser.add_argument("--force-fail-stage",
                          choices=("quality_control", "alignment", "variant_calling"))
+    parser.add_argument("--input-uri-base")
+    parser.add_argument("--output-uri-base")
+    parser.add_argument("--log-uri")
     arguments = parser.parse_args(argv)
     try:
         report = run(
             run_id=arguments.run_id, work_dir=arguments.work_dir,
             provenance_db=arguments.provenance_db, reference_build=arguments.reference_build,
             reference_version=arguments.reference_version,
+            reference_manifest_sha256=arguments.reference_manifest_sha256,
             profile=arguments.profile, input_bundle_dir=arguments.input_bundle_dir,
             execution_target=arguments.execution_target, compute_pool=arguments.compute_pool,
             aligned_format=arguments.aligned_format, variant_format=arguments.variant_format,
             force_fail_stage=arguments.force_fail_stage,
+            input_uri_base=arguments.input_uri_base,
+            output_uri_base=arguments.output_uri_base,
+            log_uri=arguments.log_uri,
         )
     except (OSError, ValueError, RuntimeError) as error:
         print(f"Nextflow secondary pipeline run could not complete: {error}", file=sys.stderr)

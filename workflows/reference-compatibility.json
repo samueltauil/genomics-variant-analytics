@@ -4,22 +4,13 @@
     {
       "workflow_id": "genomics-secondary-analysis",
       "workflow_version": "v0.1.0",
+      "reference_manifest_sha256": "7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83",
       "reference_sets": [
         [
           {
             "type": "genome",
-            "name": "GRCh38",
-            "version": "ensembl-116"
-          },
-          {
-            "type": "gene-annotation",
-            "name": "GRCh38",
-            "version": "ensembl-116"
-          },
-          {
-            "type": "transcript-annotation",
-            "name": "GRCh38",
-            "version": "ensembl-116"
+            "name": "SYN-demo-genome",
+            "version": "synthetic-1385e2e921c4"
           }
         ]
       ]

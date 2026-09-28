@@ -1,13 +1,104 @@
 # Local Infrastructure Preparation
 
-Status: candidate inventory and local validator implemented. **No Bicep templates
-have been generated and nothing is deployable.** The inventory is not an approved
-infrastructure plan or evidence of Azure resource compatibility.
+## HPC campaign implementation
 
-Azure operations are paused at the user's request. Do not authenticate to Azure,
-enumerate subscriptions, provision resources, upload artifacts, seed cloud data,
-run benchmarks, or execute teardown as part of this phase. Local validation does
-not authorize any of those operations. No cloud deployment workflow is installed.
+`infra/hpc-campaign.bicep` and `scripts/hpc_campaign.py` implement the revised
+single-campaign Slurm path. AMLFS is ephemeral POSIX scratch only; native HSM
+import/export is not configured. An explicitly selected accelerator staging
+identity uses AzCopy against an existing private HNS storage account, with
+shared-key access and public storage access disabled. The durable account,
+identity, and image must carry the expected accelerator ownership tags; only
+the ephemeral campaign resource group is deleted.
+
+The local-only validation action checks identifiers, ownership inputs, the
+explicit reference build/version/manifest digest, and workflow compatibility.
+It can generate a minimal synthetic bundle under a caller-supplied temporary
+directory. It does not contact Azure:
+
+```powershell
+python -m scripts.hpc_campaign `
+  --action validate `
+  --subscription-id "<subscription-id>" `
+  --location eastus2 `
+  --campaign-id synthetic-001 `
+  --campaign-owner SYN-OWNER-001 `
+  --admin-public-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISyntheticOnly" `
+  --slurm-image-id "/subscriptions/<subscription-id>/resourceGroups/rg-images/providers/Microsoft.Compute/galleries/genomics/images/slurm-synthetic/versions/2026.9.28" `
+  --staging-identity-resource-id "/subscriptions/<subscription-id>/resourceGroups/rg-genomics-syn/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-genomics-staging" `
+  --staging-identity-client-id 11111111-1111-1111-1111-111111111111 `
+  --staging-identity-principal-id 22222222-2222-2222-2222-222222222222 `
+  --staging-storage-account-id "/subscriptions/<subscription-id>/resourceGroups/rg-genomics-syn/providers/Microsoft.Storage/storageAccounts/stglakesynthetic" `
+  --staging-storage-account-name stglakesynthetic `
+  --staging-environment synthetic `
+  --reference-build SYN-demo-genome `
+  --reference-version synthetic-1385e2e921c4 `
+  --reference-manifest-sha256 7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83
+```
+
+The `run` action is a live, billable operation and was not executed for this
+implementation. It requires a prebuilt private image containing Slurm, the
+Lustre client, AzCopy, Java and Nextflow, Python 3, samtools, standard Linux
+mount/checksum utilities (`mount.lustre`, `mountpoint`, `findmnt`, `sha256sum`,
+GNU `find`/`sort`/`xargs`, and passwordless `sudo`), and this repository at the
+declared path. It must also provide a configured single-node Slurm
+scheduler/worker and the requested partition. Docker is not required because
+the Slurm profile runs image-pinned host tools directly.
+The template has no marketplace-image fallback. On success or failure, the
+orchestrator enters guarded synchronous teardown from a `finally` path and
+deletes only a resource group whose ownership tags exactly match the
+invocation. Failure diagnostics must therefore be copied to durable Blob
+storage by the worker before teardown; if that copy also fails, only the
+orchestrator error remains.
+
+Status: parameterized Bicep exists for the accelerator foundation and the
+separate HPC campaign. The campaign path has local/static validation only in
+this change; it has not been deployed or accepted live.
+
+## Private Slurm image
+
+`infra/slurm-image-gallery.bicep`, `infra/slurm-image-builder.bicep`,
+`infra/scripts/configure-slurm-image.sh`, and
+`scripts/build_slurm_image.py` define the private image prerequisite for the
+campaign. The implementation uses Azure VM Image Builder with a private build
+subnet and service-managed isolated-build networking, a user-assigned identity,
+a custom empty staging resource group, and Azure Compute Gallery distribution.
+The image definition is Ubuntu 24.04 Gen2 with
+`SecurityType=TrustedLaunchSupported`.
+
+The build pins the Canonical source version and running Azure kernel, installs
+the matching Microsoft prebuilt AMLFS kmod package rather than DKMS, verifies
+the Microsoft package-signing key fingerprint, and checksum-verifies the
+Nextflow and AzCopy release assets. It installs the required Slurm, AMLFS,
+AzCopy, Java, Nextflow, Python, samtools, mount/checksum, service, partition,
+and repository interfaces without Docker. The selected repository commit must
+be fetchable and must already contain the audited no-Docker Slurm profile,
+explicit Lustre work directory, durable URI options, and reference-manifest
+gate.
+
+The orchestrator refuses an existing gallery image version, grants the image
+identity only the required network, gallery-publication, and custom-staging
+roles, and validates the retained version on a separate no-public-IP Trusted
+Launch VM with Secure Boot and vTPM enabled. Validation checks the Microsoft-
+signed Lustre module, `mount.lustre`, required tools and services, Slurm
+partition, repository commit/interface, and unchanged VM security profile.
+Image-template, staging, build, and validation resources are synchronously
+removed after success or failure. An image version is retained only after full
+validation; an owned unvalidated version is deleted, and cleanup failures are
+reported rather than suppressed.
+
+Recovery validation on September 28, 2026 compiled both image Bicep templates,
+passed the focused Python tests and static configuration validation, and
+confirmed the pinned source is Gen2 and `TrustedLaunchSupported`. The bounded
+live action stopped before any Azure resource creation because the currently
+pinned commit does not contain the audited Slurm runtime interface; those
+changes remain uncommitted, and this task does not create a commit. No validated
+gallery image exists yet.
+
+Azure operations require explicit task-level authorization. The September 28
+image recovery included read-only source/quota checks and one bounded live
+entry-point invocation; the immutable-source gate stopped it before resource
+creation. Local validation by itself does not authorize provisioning, uploads,
+benchmarks, campaigns, or teardown.
 
 ## Run Locally
 

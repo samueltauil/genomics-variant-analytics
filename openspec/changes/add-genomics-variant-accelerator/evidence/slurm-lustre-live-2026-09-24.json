@@ -1,0 +1,98 @@
+{
+  "captured_at_utc": "2026-09-24T18:36:05Z",
+  "resource_group": "<authorized-resource-group>",
+  "region": "eastus2",
+  "campaign": "<disposable-hpc-campaign>",
+  "reference_gate": {
+    "focused_tests": 23,
+    "result": "passed",
+    "workflow_id": "genomics-secondary-analysis",
+    "workflow_version": "v0.1.0",
+    "declared_compatible_reference": {
+      "build": "GRCh38",
+      "version": "ensembl-116"
+    },
+    "demo_pipeline_reference": {
+      "build": "SYN-demo-genome",
+      "version": "synthetic-1385e2e921c4"
+    },
+    "live_workflow_submission": "not attempted",
+    "reason": "The demo pipeline reference identity is not an exact compatible published reference set in workflows/reference-compatibility.json.",
+    "evidence_scope": "Focused local tests prove an incompatible exact reference set does not invoke the allocator callback. The live VM and filesystem had already been provisioned, so this campaign is not additional live evidence of rejection before infrastructure allocation."
+  },
+  "slurm_host": {
+    "name": "<disposable-slurm-vm>",
+    "private_ip": "<private-ip-redacted>",
+    "slurm_version": "23.11.4",
+    "partition": "debug",
+    "node_state": "idle",
+    "nextflow_version": "26.04.6",
+    "services_active": [
+      "munge",
+      "slurmctld",
+      "slurmd",
+      "docker"
+    ]
+  },
+  "managed_lustre": {
+    "name": "<disposable-amlfs>",
+    "resource_id": "/subscriptions/<authorized-subscription>/resourceGroups/<authorized-resource-group>/providers/Microsoft.StorageCache/amlFilesystems/<disposable-amlfs>",
+    "created_at_utc": "2026-09-21T15:08:55.7254477Z",
+    "provisioning_state": "Succeeded",
+    "health": "Available",
+    "capacity_tib": 8,
+    "mount": "<amlfs-private-ip>@tcp0:/lustrefs on /mnt/amlfs",
+    "mounted_read_write": true,
+    "hsm_configuration": {},
+    "hsm_enabled": false
+  },
+  "hsm_storage": {
+    "name": "<temporary-hsm-storage>",
+    "public_network_access": "Disabled",
+    "allow_shared_key_access": false,
+    "managed_identity_role_assignments_present": true,
+    "hpc_cache_resource_provider_roles_verified": false
+  },
+  "authentication_assessment": {
+    "documented_requirements": [
+      "The storage account key-access setting must be enabled.",
+      "The HPC Cache Resource Provider service principal must receive Storage Account Contributor and Storage Blob Data Contributor."
+    ],
+    "private_network_support": "Microsoft documents private endpoints with private DNS as a supported storage access path; disabled public network access is not the blocker.",
+    "contract_conflict": "No documented AMLFS HSM option preserves allowSharedKeyAccess:false. Enabling key access would violate the repository storage contract even if no key were embedded in source, configuration, or workflow definitions.",
+    "secretless_hsm_alternative": "None documented. A client-side managed-identity copy could avoid shared-key access but would not be AMLFS HSM import/export and would not satisfy task 5.3."
+  },
+  "acceptance": {
+    "filesystem_created": true,
+    "filesystem_mounted_by_slurm_host": true,
+    "workflow_used_filesystem": false,
+    "blob_hsm_import": false,
+    "changed_results_exported": false,
+    "same_campaign_resources_removed": true,
+    "single_campaign_acceptance_satisfied": false,
+    "task_complete": false,
+    "blockers": [
+      "Azure Managed Lustre Blob integration requires the storage account key-access setting to be enabled, which conflicts with the accelerator's allowSharedKeyAccess=false storage contract.",
+      "The deployed filesystem was created with enableHsm=false and reported an empty HSM configuration.",
+      "The demo workflow's explicit synthetic reference build and immutable version are not declared as a compatible published reference set, so no Slurm workflow submission was attempted; focused local tests separately prove incompatible submissions do not invoke the allocator."
+    ]
+  },
+  "teardown": {
+    "performed_on": "2026-09-24",
+    "deleted": [
+      "<disposable-slurm-vm>",
+      "<disposable-amlfs>",
+      "<temporary-hsm-storage>",
+      "snet-managed-lustre"
+    ],
+    "post_delete_matching_resources": [],
+    "verified": true,
+    "verification_scope": "The original operator record reported no matching campaign resources after deletion. A read-only Azure recheck at 2026-09-27T02:18:01Z again returned no matching campaign resources; the former VNet was absent, so the dedicated subnet could not remain.",
+    "evidence_limit": "Raw Azure CLI response payloads are not embedded in this repository evidence file."
+  },
+  "documentation_basis": [
+    "https://learn.microsoft.com/azure/azure-managed-lustre/amlfs-prerequisites#blob-integration-prerequisites",
+    "https://learn.microsoft.com/azure/azure-managed-lustre/blob-integration",
+    "https://learn.microsoft.com/azure/azure-managed-lustre/export-with-archive-jobs"
+  ]
+}

@@ -6,6 +6,8 @@ param name string
 param subnetId string
 param adminPublicKey string
 param userAssignedIdentityIds array
+@minLength(1)
+param sourceImageId string
 param vmSize string = 'Standard_D4s_v7'
 param adminUsername string = 'azureuser'
 param zone string = '1'
@@ -46,10 +48,7 @@ resource vm 'Microsoft.Compute/virtualMachines@2024-11-01' = {
     }
     storageProfile: {
       imageReference: {
-        publisher: 'Canonical'
-        offer: 'ubuntu-24_04-lts'
-        sku: 'server'
-        version: 'latest'
+        id: sourceImageId
       }
       osDisk: {
         createOption: 'FromImage'

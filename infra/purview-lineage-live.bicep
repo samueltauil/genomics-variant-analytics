@@ -30,6 +30,7 @@ param purviewManagedEventHubNamespaceId string = ''
 
 var purviewPrivateDnsZoneName = 'privatelink.purview.azure.com'
 var purviewPlatformPrivateDnsZoneName = 'privatelink.purview-service.microsoft.com'
+var dataFactoryPurviewEndpointSuffix = take(uniqueString(purviewAccountName), 8)
 
 module purviewAccount 'modules/purview-account.bicep' = {
   name: 'purview-account'
@@ -131,25 +132,16 @@ resource managedNetwork 'Microsoft.DataFactory/factories/managedVirtualNetworks@
 
 resource purviewAccountManagedEndpoint 'Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints@2018-06-01' = {
   parent: managedNetwork
-  name: 'purview-account'
+  name: 'purview-account-${dataFactoryPurviewEndpointSuffix}'
   properties: {
     privateLinkResourceId: purviewAccount.outputs.accountId
     groupId: 'account'
   }
 }
 
-resource purviewPlatformManagedEndpoint 'Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints@2018-06-01' = {
-  parent: managedNetwork
-  name: 'purview-platform'
-  properties: {
-    privateLinkResourceId: purviewAccount.outputs.accountId
-    groupId: 'platform'
-  }
-}
-
 resource purviewBlobManagedEndpoint 'Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints@2018-06-01' = if (!empty(purviewManagedStorageAccountId)) {
   parent: managedNetwork
-  name: 'purview-ingestion-blob'
+  name: 'purview-ingestion-blob-${dataFactoryPurviewEndpointSuffix}'
   properties: {
     privateLinkResourceId: purviewManagedStorageAccountId
     groupId: 'blob'
@@ -158,7 +150,7 @@ resource purviewBlobManagedEndpoint 'Microsoft.DataFactory/factories/managedVirt
 
 resource purviewQueueManagedEndpoint 'Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints@2018-06-01' = if (!empty(purviewManagedStorageAccountId)) {
   parent: managedNetwork
-  name: 'purview-ingestion-queue'
+  name: 'purview-ingestion-queue-${dataFactoryPurviewEndpointSuffix}'
   properties: {
     privateLinkResourceId: purviewManagedStorageAccountId
     groupId: 'queue'
@@ -167,7 +159,7 @@ resource purviewQueueManagedEndpoint 'Microsoft.DataFactory/factories/managedVir
 
 resource purviewEventHubManagedEndpoint 'Microsoft.DataFactory/factories/managedVirtualNetworks/managedPrivateEndpoints@2018-06-01' = if (!empty(purviewManagedEventHubNamespaceId)) {
   parent: managedNetwork
-  name: 'purview-ingestion-eventhub'
+  name: 'purview-ingestion-eventhub-${dataFactoryPurviewEndpointSuffix}'
   properties: {
     privateLinkResourceId: purviewManagedEventHubNamespaceId
     groupId: 'namespace'
@@ -184,7 +176,7 @@ output purviewManagedStorageAccountId string = purviewManagedStorageAccountId
 output purviewManagedEventHubNamespaceId string = purviewManagedEventHubNamespaceId
 output dataFactoryPrincipalId string = dataFactory.identity.principalId
 output dataFactoryPurviewAccountManagedPrivateEndpointName string = purviewAccountManagedEndpoint.name
-output dataFactoryPurviewPlatformManagedPrivateEndpointName string = purviewPlatformManagedEndpoint.name
 output dataFactoryPurviewBlobManagedPrivateEndpointName string = empty(purviewManagedStorageAccountId) ? '' : purviewBlobManagedEndpoint.name
 output dataFactoryPurviewQueueManagedPrivateEndpointName string = empty(purviewManagedStorageAccountId) ? '' : purviewQueueManagedEndpoint.name
 output dataFactoryPurviewEventHubManagedPrivateEndpointName string = empty(purviewManagedEventHubNamespaceId) ? '' : purviewEventHubManagedEndpoint.name
+output dataFactoryPurviewIngestionEndpointsReady bool = !empty(purviewManagedStorageAccountId) && !empty(purviewManagedEventHubNamespaceId)

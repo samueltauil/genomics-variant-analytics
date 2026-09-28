@@ -1,4 +1,4 @@
-metadata description = 'Ephemeral Azure Managed Lustre filesystem with Blob HSM integration.'
+metadata description = 'Ephemeral Azure Managed Lustre filesystem used only as campaign POSIX scratch.'
 
 param location string
 param tags object
@@ -8,8 +8,6 @@ param tags object
 param name string
 
 param subnetId string
-param dataContainerId string = ''
-param loggingContainerId string = ''
 param skuName string = 'AMLFS-Durable-Premium-500'
 
 @minValue(4)
@@ -18,28 +16,6 @@ param storageCapacityTiB int = 4
 param maintenanceDayOfWeek string = 'Saturday'
 param maintenanceTimeUtc string = '22:00'
 param zone string = '1'
-
-var filesystemProperties = empty(dataContainerId) || empty(loggingContainerId) ? {
-  filesystemSubnet: subnetId
-  storageCapacityTiB: storageCapacityTiB
-  maintenanceWindow: {
-    dayOfWeek: maintenanceDayOfWeek
-    timeOfDayUTC: maintenanceTimeUtc
-  }
-} : {
-  filesystemSubnet: subnetId
-  storageCapacityTiB: storageCapacityTiB
-  hsm: {
-    settings: {
-      container: dataContainerId
-      loggingContainer: loggingContainerId
-    }
-  }
-  maintenanceWindow: {
-    dayOfWeek: maintenanceDayOfWeek
-    timeOfDayUTC: maintenanceTimeUtc
-  }
-}
 
 resource filesystem 'Microsoft.StorageCache/amlFilesystems@2026-01-01' = {
   name: name
@@ -51,8 +27,16 @@ resource filesystem 'Microsoft.StorageCache/amlFilesystems@2026-01-01' = {
     name: skuName
   }
   tags: tags
-  properties: filesystemProperties
+  properties: {
+    filesystemSubnet: subnetId
+    storageCapacityTiB: storageCapacityTiB
+    maintenanceWindow: {
+      dayOfWeek: maintenanceDayOfWeek
+      timeOfDayUTC: maintenanceTimeUtc
+    }
+  }
 }
 
 output filesystemId string = filesystem.id
 output filesystemName string = filesystem.name
+output mountAddress string = filesystem.properties.clientInfo.mgsAddress

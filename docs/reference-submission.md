@@ -27,6 +27,7 @@ Submission request:
   "workflow_version": "v1",
   "reference_build": "GRCh38",
   "reference_version": "synthetic-v1",
+  "reference_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "references": [
     {"type": "genome", "name": "GRCh38", "version": "synthetic-v1"}
   ]
@@ -41,6 +42,7 @@ Compatibility manifest:
   "workflows": [{
     "workflow_id": "synthetic-workflow",
     "workflow_version": "v1",
+    "reference_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     "reference_sets": [[
       {"type": "genome", "name": "GRCh38", "version": "synthetic-v1"}
     ]]
@@ -53,6 +55,7 @@ Published inventory shape (the URI and hash below are placeholders):
 ```json
 {
   "schema_version": 1,
+  "reference_manifest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "references": [{
     "type": "genome",
     "name": "GRCh38",
@@ -70,6 +73,12 @@ and compatible sets, with exact names and versions. Set order does not matter;
 extra, omitted, duplicated or incompatible versions are rejected. There is no
 default build or fallback to another workflow version. `hg19` and `GRCh38` are
 distinct identifiers; no alias conversion or liftover is performed.
+
+The request, compatibility declaration, and published inventory must also carry
+the same 64-character lowercase `reference_manifest_sha256`. A missing,
+malformed, or mismatched digest is rejected before the allocator callback.
+This digest identifies the immutable genome manifest; it is separate from each
+artifact checksum and from the canonical digest of the inventory document.
 
 Inventory entries also require a URI and a 64-character lowercase SHA-256.
 Credential-bearing URLs, query strings and fragments are rejected; supported
@@ -95,14 +104,16 @@ potentially sensitive metadata and use synthetic identifiers only.
 The `submit_workflow(request, compatibility, reference_zone, allocate)` Python
 API validates the explicit build and version, checks compatibility, resolves the
 exact published manifests, and calls `allocate(prepared)` exactly once only for
-an accepted pairing. The pinned result contains the run/workflow identifiers,
-the exact reference build/version, immutable manifest URIs and per-manifest
-SHA-256 digests, plus the compatibility-manifest digest. The
+an accepted pairing. The pinned result contains the run/workflow identifiers, the exact reference
+build/version and required genome-manifest digest, immutable manifest URIs and
+per-manifest SHA-256 digests, plus the compatibility-manifest and inventory
+document digests. Manifest digests use canonical JSON (sorted object keys,
+compact separators, ASCII escaping), so formatting and a terminal newline do
+not change identity. The
 `submit_run(request, compatibility, inventory, allocate)` API provides the same
 ordering for a trusted inventory document. Digests use SHA-256 of canonical
-JSON (sorted object keys, compact separators, ASCII escaping); they are not hashes
-of the original document bytes or signatures. Changing array order changes a
-manifest digest even though reference-set matching is order independent.
+JSON; they are not signatures. Changing array order changes a document digest
+even though reference-set matching is order independent.
 
 The future Nextflow/Batch/Slurm integration must load reviewed compatibility
 declarations and inventory from a trusted source, verify the published artifacts,
@@ -114,8 +125,16 @@ in-memory SQLite governor and synthetic principals; the Azure reference clients
 still require a durable deployed audit sink before cloud-side auditing can be
 claimed.
 
+The runnable demo uses the metadata-only
+[`workflows/synthetic-reference-manifest.json`](../workflows/synthetic-reference-manifest.json):
+build `SYN-demo-genome`, version `synthetic-1385e2e921c4`, and canonical
+manifest SHA-256
+`7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83`.
+Its only artifact entry pins the deterministic runtime-generated
+`reference.fasta` checksum and size; the FASTA itself is never committed.
+
 Synthetic tests cover incompatible build/annotation rejection before the
-allocator, missing explicit build/version without fallback, exact matching,
-duplicate/schema validation, credential-free artifact metadata, detached pinned
-output and CLI validation. No genomic payloads or real reference builds are test
-fixtures.
+allocator, missing or mismatched build/version/manifest digest without
+fallback, exact matching, duplicate/schema validation, credential-free
+artifact metadata, detached pinned output and CLI validation. No genomic
+payloads or real reference builds are test fixtures.

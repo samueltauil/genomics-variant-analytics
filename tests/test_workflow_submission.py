@@ -1,15 +1,16 @@
 import copy
-import hashlib
 import io
 import json
 import sqlite3
+import tempfile
 from pathlib import Path
 import unittest
 from unittest.mock import Mock
 
 from scripts.governance import GovernancePolicy
 from scripts.publish_reference import ReferenceZone, reference_path
-from scripts.validate_submission import unique_object, validate_request_compatibility
+from scripts.secondary_pipeline import generate_demo_sample
+from scripts.validate_submission import digest, unique_object, validate_request_compatibility
 from scripts.workflow_submission import submit_pipeline_workflow, submit_workflow
 
 
@@ -61,6 +62,7 @@ class WorkflowSubmissionTests(unittest.TestCase):
             "workflow_version": "v1",
             "reference_build": "SYN-build",
             "reference_version": "v1",
+            "reference_manifest_sha256": None,
             "references": copy.deepcopy(self.references),
         }
         self.compatibility = {
@@ -68,6 +70,7 @@ class WorkflowSubmissionTests(unittest.TestCase):
             "workflows": [{
                 "workflow_id": "synthetic-workflow",
                 "workflow_version": "v1",
+                "reference_manifest_sha256": None,
                 "reference_sets": [copy.deepcopy(self.references)],
             }],
         }
@@ -81,7 +84,7 @@ class WorkflowSubmissionTests(unittest.TestCase):
         self.publisher = ReferenceZone(
             self.transport, self.policy, "SYN-REFERENCE-PUBLISHER"
         )
-        self.publisher.publish(
+        genome_manifest = self.publisher.publish(
             self.genome, [artifact("reference.fa.gz")], "2026-09-15T00:00:00Z"
         )
         self.publisher.publish(
@@ -89,6 +92,10 @@ class WorkflowSubmissionTests(unittest.TestCase):
         )
         self.zone = ReferenceZone(
             self.transport, self.policy, "SYN-WORKFLOW-SUBMITTER"
+        )
+        self.request["reference_manifest_sha256"] = digest(genome_manifest)
+        self.compatibility["workflows"][0]["reference_manifest_sha256"] = digest(
+            genome_manifest
         )
         self.allocate = Mock(return_value="SYN-ALLOCATION-001")
 
@@ -113,7 +120,10 @@ class WorkflowSubmissionTests(unittest.TestCase):
         for resolved in prepared["references"]:
             entry = {field: resolved[field] for field in ("type", "name", "version")}
             payload = self.transport.get(reference_path(entry))
-            self.assertEqual(resolved["manifest_sha256"], hashlib.sha256(payload).hexdigest())
+            self.assertEqual(
+                resolved["manifest_sha256"],
+                digest(json.loads(payload)),
+            )
             self.assertEqual(resolved["manifest_uri"], self.transport.uri(reference_path(entry)))
             self.assertTrue(resolved["artifacts"])
             for pinned in resolved["artifacts"]:
@@ -165,9 +175,18 @@ class WorkflowSubmissionTests(unittest.TestCase):
         del self.request["reference_version"]
         self.assert_rejected_without_allocation("exactly")
 
+    def test_missing_reference_manifest_digest_never_allocates(self):
+        del self.request["reference_manifest_sha256"]
+        self.assert_rejected_without_allocation("exactly")
+
     def test_mismatched_explicit_reference_build_never_allocates(self):
         self.request["reference_build"] = "SYN-other-build"
         self.assert_rejected_without_allocation("reference_build/reference_version")
+
+    def test_mismatched_reference_manifest_digest_never_allocates(self):
+        self.request["reference_manifest_sha256"] = "f" * 64
+        self.compatibility["workflows"][0]["reference_manifest_sha256"] = "f" * 64
+        self.assert_rejected_without_allocation("Published genome reference manifest digest")
 
     def test_invalid_or_mismatched_published_manifest_never_allocates(self):
         manifest_path = reference_path(self.genome)
@@ -187,6 +206,9 @@ class WorkflowSubmissionTests(unittest.TestCase):
     def test_repository_compatibility_manifest_declares_an_explicit_versioned_set(self):
         with COMPATIBILITY_PATH.open(encoding="utf-8") as source:
             compatibility = json.load(source, object_pairs_hook=unique_object)
+        manifest_path = REPOSITORY_ROOT / "workflows" / "synthetic-reference-manifest.json"
+        with manifest_path.open(encoding="utf-8") as source:
+            manifest = json.load(source, object_pairs_hook=unique_object)
         workflow = compatibility["workflows"][0]
         request = {
             "run_id": "SYN-MANIFEST-CHECK",
@@ -200,13 +222,54 @@ class WorkflowSubmissionTests(unittest.TestCase):
                 reference["version"] for reference in workflow["reference_sets"][0]
                 if reference["type"] == "genome"
             ),
+            "reference_manifest_sha256": digest(manifest),
             "references": copy.deepcopy(workflow["reference_sets"][0]),
         }
 
         resolved = validate_request_compatibility(request, compatibility)
 
-        self.assertEqual(len(resolved), 3)
-        self.assertTrue(all(key[2] == "ensembl-116" for key in resolved))
+        self.assertEqual(resolved, frozenset({
+            ("genome", "SYN-demo-genome", "synthetic-1385e2e921c4")
+        }))
+        self.assertEqual(workflow["reference_manifest_sha256"], digest(manifest))
+
+    def test_repository_synthetic_reference_reaches_allocator_with_exact_manifest(self):
+        with COMPATIBILITY_PATH.open(encoding="utf-8") as source:
+            compatibility = json.load(source, object_pairs_hook=unique_object)
+        manifest_path = REPOSITORY_ROOT / "workflows" / "synthetic-reference-manifest.json"
+        with manifest_path.open(encoding="utf-8") as source:
+            manifest = json.load(source, object_pairs_hook=unique_object)
+        entry = {field: manifest[field] for field in ("type", "name", "version")}
+        with tempfile.TemporaryDirectory() as directory:
+            sample = generate_demo_sample(Path(directory))
+            self.publisher.publish(
+                entry,
+                [{
+                    "filename": "reference.fasta",
+                    "open": lambda: io.BytesIO(Path(sample["reference_fasta"]).read_bytes()),
+                    "source": manifest["artifacts"][0]["source"],
+                }],
+                manifest["published_at"],
+            )
+        request = {
+            "run_id": "SYN-REPOSITORY-REFERENCE",
+            "workflow_id": "genomics-secondary-analysis",
+            "workflow_version": "v0.1.0",
+            "reference_build": entry["name"],
+            "reference_version": entry["version"],
+            "reference_manifest_sha256": digest(manifest),
+            "references": [entry],
+        }
+        self.allocate.reset_mock()
+
+        self.assertEqual(
+            submit_workflow(request, compatibility, self.zone, self.allocate),
+            "SYN-ALLOCATION-001",
+        )
+        self.assertEqual(
+            self.allocate.call_args.args[0]["reference_manifest_sha256"],
+            digest(manifest),
+        )
 
     def test_unattested_pipeline_image_is_rejected_before_compute(self):
         evidence = {

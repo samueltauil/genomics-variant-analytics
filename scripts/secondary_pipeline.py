@@ -35,8 +35,114 @@ from typing import Any
 
 STAGE_ORDER = ("quality_control", "alignment", "variant_calling")
 
-DEMO_REFERENCE_BUILD = "SYN-demo-genome"
 DEMO_CONTIG = "SYN-chr1"
+DEMO_REFERENCE_SEED = 20260919
+DEMO_REFERENCE_LENGTH = 120
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+SYNTHETIC_REFERENCE_MANIFEST_PATH = (
+    REPOSITORY_ROOT / "workflows" / "synthetic-reference-manifest.json"
+)
+REFERENCE_COMPATIBILITY_PATH = REPOSITORY_ROOT / "workflows" / "reference-compatibility.json"
+
+
+def _canonical_digest(value: Any) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def synthetic_reference_manifest() -> dict[str, Any]:
+    manifest = json.loads(SYNTHETIC_REFERENCE_MANIFEST_PATH.read_text(encoding="utf-8"))
+    expected = {"schema_version", "type", "name", "version", "published_at", "artifacts"}
+    if set(manifest) != expected or manifest["schema_version"] != 1:
+        raise ValueError("Synthetic reference manifest has an unsupported shape or schema.")
+    if manifest["type"] != "genome" or len(manifest["artifacts"]) != 1:
+        raise ValueError("Synthetic reference manifest must declare exactly one genome artifact.")
+    return manifest
+
+
+def synthetic_reference_identity() -> dict[str, str]:
+    manifest = synthetic_reference_manifest()
+    return {
+        "reference_build": manifest["name"],
+        "reference_version": manifest["version"],
+        "reference_manifest_sha256": _canonical_digest(manifest),
+    }
+
+
+def validate_synthetic_reference_submission(
+    workflow_id: str,
+    workflow_version: str,
+    reference_build: str,
+    reference_version: str,
+    reference_manifest_sha256: str,
+) -> dict[str, str]:
+    from scripts.validate_submission import unique_object, validate_request_compatibility
+
+    manifest = synthetic_reference_manifest()
+    identity = synthetic_reference_identity()
+    compatibility = json.loads(
+        REFERENCE_COMPATIBILITY_PATH.read_text(encoding="utf-8"),
+        object_pairs_hook=unique_object,
+    )
+    request = {
+        "run_id": "SYN-REFERENCE-VALIDATION",
+        "workflow_id": workflow_id,
+        "workflow_version": workflow_version,
+        "reference_build": reference_build,
+        "reference_version": reference_version,
+        "reference_manifest_sha256": reference_manifest_sha256,
+        "references": [{
+            "type": manifest["type"],
+            "name": reference_build,
+            "version": reference_version,
+        }],
+    }
+    validate_request_compatibility(request, compatibility)
+    if reference_manifest_sha256 != identity["reference_manifest_sha256"]:
+        raise ValueError(
+            "Synthetic reference manifest digest does not match the generated reference."
+        )
+    return identity
+
+
+def validate_synthetic_reference_bundle(
+    bundle_dir: Path,
+    reference_build: str,
+    reference_version: str,
+    reference_manifest_sha256: str,
+) -> None:
+    identity = validate_synthetic_reference_submission(
+        "genomics-secondary-analysis",
+        "v0.1.0",
+        reference_build,
+        reference_version,
+        reference_manifest_sha256,
+    )
+    bundle_dir = Path(bundle_dir)
+    sample_manifest = json.loads(
+        (bundle_dir / "sample_manifest.json").read_text(encoding="utf-8")
+    )
+    for field, expected in identity.items():
+        if sample_manifest.get(field) != expected:
+            raise ValueError(
+                f"Staged synthetic reference {field} does not match the submitted identity."
+            )
+    manifest = synthetic_reference_manifest()
+    artifact = manifest["artifacts"][0]
+    reference_fasta = bundle_dir / artifact["filename"]
+    reference_bytes = reference_fasta.read_bytes()
+    if (
+        len(reference_bytes) != artifact["size_bytes"]
+        or hashlib.sha256(reference_bytes).hexdigest() != artifact["sha256"]
+    ):
+        raise ValueError(
+            "Staged synthetic reference content does not match its immutable manifest."
+        )
+
+
+DEMO_REFERENCE_BUILD = synthetic_reference_identity()["reference_build"]
 
 
 class StageFailure(RuntimeError):
@@ -72,7 +178,7 @@ def _synthetic_sequence(seed: int, length: int) -> str:
 
 
 def generate_demo_sample(scratch_dir: Path, sample_id: str = "SYN-SAMPLE-0001",
-                          read_count: int = 12, seed: int = 20260919) -> dict[str, Any]:
+                          read_count: int = 12, seed: int = DEMO_REFERENCE_SEED) -> dict[str, Any]:
     """Write a tiny synthetic reference + paired FASTQ reads under `scratch_dir`.
 
     Returns a manifest describing the generated files, the explicit reference
@@ -84,17 +190,36 @@ def generate_demo_sample(scratch_dir: Path, sample_id: str = "SYN-SAMPLE-0001",
     scratch_dir = Path(scratch_dir)
     scratch_dir.mkdir(parents=True, exist_ok=True)
 
-    reference_sequence = _synthetic_sequence(seed, 120)
+    manifest = synthetic_reference_manifest()
+    identity = synthetic_reference_identity()
+    reference_sequence = _synthetic_sequence(seed, DEMO_REFERENCE_LENGTH)
     reference_digest = _sha256_text(reference_sequence)
     reference_version = f"synthetic-{reference_digest[:12]}"
+    if (
+        identity["reference_build"] != DEMO_REFERENCE_BUILD
+        or identity["reference_version"] != reference_version
+    ):
+        raise ValueError(
+            "Generated synthetic reference identity does not match its immutable manifest."
+        )
 
     reference_fasta = scratch_dir / "reference.fasta"
-    reference_fasta.write_text(
+    reference_text = (
         f">{DEMO_CONTIG} synthetic demo reference, not a real genome\n"
         + "\n".join(reference_sequence[i:i + 60] for i in range(0, len(reference_sequence), 60))
-        + "\n",
-        encoding="utf-8",
+        + "\n"
     )
+    reference_bytes = reference_text.encode("utf-8")
+    reference_fasta.write_bytes(reference_bytes)
+    artifact = manifest["artifacts"][0]
+    if (
+        artifact["filename"] != reference_fasta.name
+        or artifact["sha256"] != hashlib.sha256(reference_bytes).hexdigest()
+        or artifact["size_bytes"] != len(reference_bytes)
+    ):
+        raise ValueError(
+            "Generated synthetic reference content does not match its immutable manifest."
+        )
 
     # Deterministic, known variant truth: substitute the base at each position
     # with a different, fixed base so the caller under test has a documented
@@ -141,7 +266,8 @@ def generate_demo_sample(scratch_dir: Path, sample_id: str = "SYN-SAMPLE-0001",
         "reference_fasta": reference_fasta,
         "reference_build": DEMO_REFERENCE_BUILD,
         "reference_version": reference_version,
-        "reference_sha256": reference_digest,
+        "reference_manifest_sha256": identity["reference_manifest_sha256"],
+        "reference_sha256": artifact["sha256"],
         "contig": DEMO_CONTIG,
         "contig_length": len(reference_sequence),
         "reads_r1": reads_r1,

@@ -30,20 +30,18 @@ param managedResourcesPublicNetworkAccess string = 'Disabled'
   'Disabled'
   'NotSpecified'
 ])
-param ingestionStoragePublicNetworkAccess string = 'Disabled'
+@description('Purview lineage ingestion requires the managed Event Hubs namespace when public access is disabled.')
+param managedEventHubState string = 'Enabled'
 
-@allowed([
-  'Enabled'
-  'Disabled'
-  'NotSpecified'
-])
-@description('Leave Event Hubs in its default state; task 3.4 only requires Copy-activity lineage, not Kafka notifications.')
-param managedEventHubState string = 'NotSpecified'
-
-resource account 'Microsoft.Purview/accounts@2023-05-01-preview' = {
+resource account 'Microsoft.Purview/accounts@2021-12-01' = {
   name: accountName
   location: location
   tags: tags
+  #disable-next-line BCP073
+  sku: {
+    name: 'Standard'
+    capacity: 1
+  }
   identity: {
     type: 'SystemAssigned'
   }
@@ -52,9 +50,6 @@ resource account 'Microsoft.Purview/accounts@2023-05-01-preview' = {
     managedResourceGroupName: managedResourceGroupName
     managedResourcesPublicNetworkAccess: managedResourcesPublicNetworkAccess
     managedEventHubState: managedEventHubState
-    ingestionStorage: {
-      publicNetworkAccess: ingestionStoragePublicNetworkAccess
-    }
   }
 }
 

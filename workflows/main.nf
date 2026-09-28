@@ -25,6 +25,7 @@ nextflow.enable.dsl = 2
 params.run_id             = null
 params.reference_build    = null
 params.reference_version  = null
+params.reference_manifest_sha256 = null
 params.sample_id          = 'SYN-SAMPLE-0001'
 params.read_count         = 12
 params.aligned_format      = 'bam'   // 'bam' or 'cram'
@@ -52,6 +53,7 @@ process GENERATE_DEMO_SAMPLE {
     generate_demo_sample.py \
         --reference-build ${params.reference_build} \
         --reference-version ${params.reference_version} \
+        --reference-manifest-sha256 ${params.reference_manifest_sha256} \
         --sample-id ${params.sample_id} \
         --read-count ${params.read_count}
     """
@@ -149,6 +151,8 @@ workflow {
         exit 1, "reference_build is required; no reference build may be inferred or defaulted."
     if( !params.reference_version )
         exit 1, "reference_version is required; no fallback reference version is permitted."
+    if( !params.reference_manifest_sha256 )
+        exit 1, "reference_manifest_sha256 is required; no unpinned reference is permitted."
 
     def VALID_STAGES = ['quality_control', 'alignment', 'variant_calling']
     if( params.force_fail_stage && !(params.force_fail_stage in VALID_STAGES) )
