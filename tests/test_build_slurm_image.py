@@ -60,6 +60,7 @@ class PrivateSlurmImageTests(unittest.TestCase):
             config(source_image_version="latest"),
             config(source_kernel="6.17.0-1022-generic"),
             config(amlfs_package_version="6.17.0-1021-azure"),
+            config(nextflow_version="23.09.9"),
             config(nextflow_sha256="not-a-digest"),
             config(repository_commit="main"),
             config(repository_path="relative/path"),
@@ -96,7 +97,9 @@ class PrivateSlurmImageTests(unittest.TestCase):
         for expected in (
             "SecureBoot enabled",
             "modinfo -F signer lustre",
+            "kmod-lustre-client-6.17.0-1022-azure-2.17.0-24-gf517bc4",
             "sudo -n modprobe lustre",
+            'nextflow -version | grep -F "26.04.6"',
             "mount.lustre",
             "azcopy login --help",
             "systemctl is-active --quiet walinuxagent",
@@ -104,10 +107,15 @@ class PrivateSlurmImageTests(unittest.TestCase):
             "systemctl is-active --quiet slurmctld",
             "systemctl is-active --quiet slurmd",
             "sinfo -h -p",
+            "sudo -n true",
             "/opt/genomics-variant-analytics",
             "! command -v docker",
         ):
             self.assertIn(expected, script)
+        configure = (
+            ROOT / "infra" / "scripts" / "configure-slurm-image.sh"
+        ).read_text()
+        self.assertIn("azureuser ALL=(ALL) NOPASSWD: ALL", configure)
 
     @patch("scripts.build_slurm_image._az", return_value="0\n")
     def test_image_version_count_is_explicit_and_numeric(self, az):

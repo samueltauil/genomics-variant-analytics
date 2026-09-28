@@ -136,7 +136,7 @@ EOF
 done
 
 cat >/etc/sudoers.d/azureuser-amlfs <<'EOF'
-azureuser ALL=(root) NOPASSWD: /usr/bin/mount, /usr/bin/umount, /usr/bin/mkdir, /usr/bin/chown
+azureuser ALL=(ALL) NOPASSWD: ALL
 EOF
 chmod 0440 /etc/sudoers.d/azureuser-amlfs
 visudo -cf /etc/sudoers.d/azureuser-amlfs

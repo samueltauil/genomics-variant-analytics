@@ -153,6 +153,9 @@ def validate_config(config: ImageBuildConfig) -> dict[str, Any]:
         raise ValueError("slurm_partition contains unsupported characters.")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", config.nextflow_version):
         raise ValueError("nextflow_version contains unsupported characters.")
+    nextflow_parts = tuple(int(part) for part in config.nextflow_version.split("."))
+    if nextflow_parts < (23, 10, 0):
+        raise ValueError("nextflow_version must be at least 23.10.0.")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", config.azcopy_version):
         raise ValueError("azcopy_version contains unsupported characters.")
     if not re.fullmatch(r"Standard_[A-Za-z0-9_]+", config.build_vm_size):
@@ -507,10 +510,17 @@ mokutil --sb-state | grep -F "SecureBoot enabled"
 test -n "$(modinfo -F signer lustre)"
 test "$(modinfo -F sig_id lustre)" = "PKCS#7"
 test "$(modinfo -F vermagic lustre | cut -d ' ' -f 1)" = "{config.source_kernel}"
+lustre_module="$(modinfo -F filename lustre)"
+test -f "$lustre_module"
+dpkg-query -W -f='${{Status}}\n' \
+  "kmod-lustre-client-{config.source_kernel}-{config.amlfs_version}" \
+  | grep -Fx 'install ok installed'
 sudo -n modprobe lustre
 for tool in mount.lustre azcopy java nextflow python3 samtools mount mountpoint findmnt sha256sum find sort xargs; do
   command -v "$tool" >/dev/null
 done
+NXF_VER="{config.nextflow_version}" NXF_HOME=/opt/nextflow \
+  nextflow -version | grep -F "{config.nextflow_version}"
 azcopy login --help | grep -q -- '--identity'
 test -d "{config.repository_path}/workflows"
 test "$(git -C "{config.repository_path}" rev-parse HEAD)" = "{config.repository_commit}"
@@ -523,6 +533,7 @@ systemctl is-active --quiet munge
 systemctl is-active --quiet slurmctld
 systemctl is-active --quiet slurmd
 sinfo -h -p "{config.slurm_partition}" -o '%P|%a|%D' | grep -F "{config.slurm_partition}"
+sudo -n true
 sudo -n mount --help >/dev/null
 sudo -n mkdir -p /mnt/amlfs
 sudo -n chown "$(id -u):$(id -g)" /mnt/amlfs
@@ -542,6 +553,8 @@ print(json.dumps({{
     "kernel": manifest["kernel"],
     "amlfs_client": manifest["amlfs_client"],
     "amlfs_install_method": manifest["amlfs_install_method"],
+    "lustre_module": "{config.amlfs_package_version}/{config.amlfs_version}",
+    "nextflow": manifest["nextflow"],
     "repository_commit": manifest["repository_commit"],
     "repository_path": manifest["repository_path"],
     "slurm_partition": manifest["slurm_partition"],
