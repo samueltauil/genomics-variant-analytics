@@ -331,7 +331,7 @@ else {
 
 $blocking = @($checks | Where-Object Status -eq 'FAIL')
 $unverified = @($checks | Where-Object Status -eq 'UNVERIFIED')
-$ready = $blocking.Count -eq 0 -and (($RequireAzureChecks -or $SnapshotPath) -or $unverified.Count -eq 0)
+$ready = $checks.Count -gt 0 -and $blocking.Count -eq 0 -and $unverified.Count -eq 0
 $report = [pscustomobject]@{
     Mode = if ($SnapshotPath) { 'snapshot-preflight' } elseif ($RequireAzureChecks) { 'azure-preflight' } else { 'local-preflight' }
     GeneratedOn = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')

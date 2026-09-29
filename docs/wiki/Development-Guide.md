@@ -1,6 +1,6 @@
 # Development Guide
 
-The default-branch baseline includes repository data hygiene, local infrastructure validation, write-test tooling, landing completeness, reference-submission, metadata-model, variant-store, governance, analytics, MCP, Azure Batch secondary-analysis evidence, and engineering-workflow changes as of 2026-10-01. There is no accepted end-to-end cloud demo command; local harnesses and bounded measured-cloud evidence are the current evidence.
+The default-branch baseline includes repository data hygiene, local infrastructure validation, write-test tooling, landing completeness, reference-submission, metadata-model, variant-store, governance, analytics, MCP, Azure Batch secondary-analysis evidence, and engineering-workflow changes as of 2026-09-29. There is no accepted end-to-end cloud demo command; local harnesses and bounded measured-cloud evidence are the current evidence.
 
 ## Local Checks
 

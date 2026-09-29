@@ -209,6 +209,18 @@ retained. Redacted evidence is
 [private-slurm-image-recovery-2026-09-28.json](evidence/private-slurm-image-recovery-2026-09-28.json).
 Task 5.3 remains unchecked because no revised live campaign ran.
 
+Task 5.3 read-only verification (2026-09-29): live preflight confirmed the
+subscription, billing agreement, required resource providers, deployer roles,
+and compute quota, but regional availability for all seven required
+components and the storage quota remained unverified. The preflight had
+reported `Ready: true` in this state; its gate now fails closed unless every
+check passes, and focused preflight/runbook tests pass. Read-only inventory
+found the deployed foundation and Azure Batch account, but no Managed Lustre
+filesystem or Compute Gallery image version; the verification VM is
+deallocated. The Slurm image/campaign tests (22) and Python compilation pass,
+but no campaign resource was created and no immutable Slurm image is
+available. Task 5.3 remains open.
+
 Task 5.7 evidence (2026-09-21): a deliberate concurrent burst launched two independent Azure Batch profile runs (`azure-batch-burst-001`, `azure-batch-burst-002`) in parallel from the authorized verification VM (`vm-genomics-20260919`) against the same live pool (`secondary-analysis-pool`). Both runs reached terminal success at `2026-09-21T13:46:23Z` and each published a BAM, BAI, VCF, FASTQ inputs, manifest, and `qc_report.json` under `/root/batch-burst/<run_id>/results`. During the burst, `az batch pool show` observed the autoscale formula raise the pool to `targetDedicatedNodes: 2` and `currentDedicatedNodes: 2` at `2026-09-21T13:43:27Z` with `autoScaleRun.results` reporting `$TargetDedicatedNodes=2 ... $tasks=2`, confirming demand-driven allocation for concurrent work. After the runs completed, the same polling sequence observed the pool step down through `targetDedicatedNodes: 1` / `currentDedicatedNodes: 1` and then return to `targetDedicatedNodes: 0`, `currentDedicatedNodes: 0`, `allocationState: steady` at `2026-09-21T13:53:08Z` with `autoScaleRun.results` reporting `$TargetDedicatedNodes=0 ... $tasks=0`. This satisfies the requirement to show compute allocation during a burst and release back to zero only after the concurrent runs reached terminal state; the verification VM was then deallocated again to avoid idle compute cost.
 
 - [x] 5.1 Author the Nextflow pipeline covering quality control, alignment, BAM/CRAM output, and variant calling to VCF/GVCF, and verify it completes on the demo sample producing both output types
@@ -507,6 +519,15 @@ implementation paths, and the matching coverage-table status; all nine remain
 labelled `assumption` because no explicit reviewed confirmation exists. The
 full 244-test suite, the repository scanner, and strict OpenSpec validation
 pass.
+
+Task 12.1 local verification attempt (2026-09-29): the seven-step contract
+test, synthetic manifest validation, and all three isolated failure
+demonstrations passed. These checks do not exercise an instrument/SMB transfer,
+a Slurm/Managed Lustre campaign, a deployed Delta store, or deployed analytics
+and governance services. Live preflight now fails closed while regional and
+storage checks are unverified, and the runbook explicitly prohibits presenting
+local evidence as live Azure behavior. No full seven-step delivery was
+executed; task 12.1 remains open.
 
 - [ ] 12.1 Execute the full seven-step demo scenario from instrument write through governance review, and verify each step produces the observable output named in its capability spec
 - [x] 12.2 Measure and report the accelerator KPIs (pipeline success rate, arrival-to-queryable time, query response time, percentage of records linked to source files, reprocessing time, cost per sample), and verify each is produced from instrumented data rather than estimated

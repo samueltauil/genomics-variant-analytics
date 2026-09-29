@@ -1,6 +1,6 @@
 # Demo Readiness and Limitations
 
-**There is still no accepted live seven-step end-to-end demo as of 2026-10-01.** Repository guardrails, ingestion, staging, reference publication, Azure Batch secondary analysis, the Delta variant store, metadata lineage, governance, analytics/visualization, and the engineering-platform controls all have local synthetic or measured-cloud acceptance evidence. OIDC-backed ACR publication and registry-hosted provenance/SBOM verification are live. Slurm/AMLFS live campaign acceptance, executor concordance, and the live seven-step presentation remain open.
+**There is still no accepted live seven-step end-to-end demo as of 2026-09-29.** Repository guardrails, ingestion, staging, reference publication, Azure Batch secondary analysis, the Delta variant store, metadata lineage, governance, analytics/visualization, and the engineering-platform controls all have local synthetic or measured-cloud acceptance evidence. OIDC-backed ACR publication and registry-hosted provenance/SBOM verification are live. Slurm/AMLFS live campaign acceptance, executor concordance, and the live seven-step presentation remain open.
 
 ## Readiness
 
