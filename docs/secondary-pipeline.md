@@ -46,17 +46,21 @@ validation or compliance. See [claim-register.md](claim-register.md) and
 
 Task 5.3 now has a locally and statically validated single-campaign
 orchestration path, but its required live create/use/copy-out/teardown
-acceptance remains incomplete. The recovered private-image implementation uses
-Azure VM Image Builder, a Gen2 `TrustedLaunchSupported` Compute Gallery
-definition, and the Microsoft prebuilt signed AMLFS kmod package; it never
-installs DKMS, Docker, or changes the validation VM security profile. Focused
-tests and Bicep compilation pass. A bounded live action on September 28, 2026
-stopped before Azure resource creation because the pinned repository commit
-does not yet contain the audited no-Docker Slurm runtime interface. No
-validated gallery image exists. The earlier September 27 DKMS attempt remains
-historical failed evidence and is not the current design. Task 5.4
-(Batch-vs-HPC concordance) also remains outside this implementation. Task 5.2
-(Azure Batch live execution) is complete -- see
+acceptance remains incomplete. The private-image implementation now configures
+a private no-public-IP Trusted Launch Ubuntu 24.04 build VM, verifies its pinned
+kernel and Secure Boot state, deprovisions/generalizes it, captures it into a
+Gen2 `TrustedLaunchSupported` Compute Gallery definition, and validates the
+retained version on a separate Trusted Launch VM. It uses the Microsoft
+prebuilt signed AMLFS kmod package; it never installs DKMS, Docker, creates a
+build storage account, or changes a VM security profile after provisioning.
+Azure VM Image Builder was rejected on September 29, 2026 because its internal
+staging storage account requires shared-key VHD access, which is incompatible
+with the tenant policy requiring `allowSharedKeyAccess:false`. Focused tests
+and Bicep compilation pass, but the Trusted Launch VM capture path has not yet
+been live-validated. No validated gallery image exists. The earlier September
+27 DKMS attempt remains historical failed evidence and is not the current
+design. Task 5.4 (Batch-vs-HPC concordance) also remains outside this
+implementation. Task 5.2 (Azure Batch live execution) is complete -- see
 [Azure Batch profile -- validated with a live run](#azure-batch-profile----validated-with-a-live-run-task-52)
 below.
 

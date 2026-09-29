@@ -128,13 +128,14 @@ Customers that keep persistent scratch can reduce orchestration at the cost of
 ongoing capacity charges.
 
 The private image prerequisite is implemented but not live-validated. The
-builder uses a Microsoft prebuilt signed AMLFS kmod and validates the retained
-image on a Secure Boot-enabled Trusted Launch VM without changing its security
-profile. A live image build is blocked until the audited Slurm runtime
-interface is present in a fetchable immutable repository commit; using the
-dirty working tree would break reproducibility. Until that commit exists and
-the bounded build passes, no validated gallery image is available for a live
-campaign.
+builder uses a private no-public-IP Trusted Launch VM capture path, a Microsoft
+prebuilt signed AMLFS kmod, and a retained-image validation VM with Secure Boot
+and vTPM enabled. It does not mutate VM security profiles after provisioning.
+Azure VM Image Builder is not used: a September 29, 2026 live attempt showed
+that AIB's internal staging storage account requires shared-key VHD access,
+which conflicts with the tenant policy requiring `allowSharedKeyAccess:false`.
+Until the Trusted Launch VM capture path passes a bounded live run, no
+validated gallery image is available for a live campaign.
 
 ## Catalog, lineage, and reproducibility constraints
 

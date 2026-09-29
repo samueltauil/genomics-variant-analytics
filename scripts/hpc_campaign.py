@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shlex
 import shutil
@@ -206,7 +207,27 @@ def build_synthetic_bundle(directory: Path, config: CampaignConfig) -> dict[str,
 
 
 def _run(arguments: list[str], *, error: str) -> str:
-    completed = subprocess.run(arguments, capture_output=True, text=True, check=False)
+    executable = shutil.which(arguments[0])
+    if executable is None:
+        raise RuntimeError(f"{error}: executable not found: {arguments[0]}")
+    command = [executable, *arguments[1:]]
+    if os.name == "nt" and Path(executable).suffix.lower() in {".cmd", ".bat"}:
+        completed = subprocess.run(
+            subprocess.list2cmdline(command),
+            capture_output=True,
+            text=True,
+            check=False,
+            shell=True,
+            stdin=subprocess.DEVNULL,
+        )
+    else:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
+        )
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout).strip()
         raise RuntimeError(f"{error}: {detail}")

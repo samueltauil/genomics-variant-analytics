@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -8,6 +9,7 @@ from scripts.build_slurm_image import (
     _image_version_count,
     _verify_repository_commit,
     _validation_script,
+    run_build,
     validate_config,
 )
 
@@ -42,6 +44,50 @@ def config(**overrides):
     return ImageBuildConfig(**values)
 
 
+SECURITY_PROFILE = json.dumps(
+    {
+        "securityType": "TrustedLaunch",
+        "uefiSettings": {"secureBootEnabled": True, "vTpmEnabled": True},
+    }
+)
+
+
+def run_command_output(message):
+    return json.dumps({"value": [{"message": message}]})
+
+
+def builder_outputs():
+    return json.dumps(
+        {
+            "properties": {
+                "outputs": {
+                    "buildVmId": {"value": "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/vm-build-syn-20260927"},
+                    "buildVmName": {"value": "vm-build-syn-20260927"},
+                    "buildSubnetId": {"value": "/subscriptions/sub/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet/subnets/snet-build"},
+                }
+            }
+        }
+    )
+
+
+def version_show():
+    return json.dumps(
+        {
+            "tags": {
+                "project": "genomics-variant-accelerator",
+                "component": "private-slurm-image",
+                "environment": "20260927",
+                "buildId": "syn-20260927",
+                "amlfsInstall": "prebuilt-kmod",
+                "secureBoot": "required",
+                "vtpm": "required",
+                "buildMethod": "trusted-launch-vm-capture",
+                "buildStorageAccountCreated": "false",
+            }
+        }
+    )
+
+
 class PrivateSlurmImageTests(unittest.TestCase):
     def test_static_contract_is_pinned_and_trusted_launch_compatible(self):
         report = validate_config(config())
@@ -49,7 +95,9 @@ class PrivateSlurmImageTests(unittest.TestCase):
             report["source_image_urn"],
             "Canonical:ubuntu-24_04-lts:server:24.04.202609040",
         )
+        self.assertEqual(report["build_method"], "trusted-launch-vm-capture")
         self.assertEqual(report["amlfs_install_method"], "prebuilt-kmod")
+        self.assertFalse(report["build_storage_account_created"])
         self.assertTrue(report["secure_boot_required"])
         self.assertTrue(report["vtpm_required"])
         self.assertIn("/versions/2026.9.27", report["image_version_id"])
@@ -73,21 +121,28 @@ class PrivateSlurmImageTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_config(value)
 
-    def test_build_assets_preserve_secure_boot_and_exclude_dkms(self):
+    def test_build_assets_capture_trusted_launch_vm_without_public_or_aib_resources(self):
         builder = (ROOT / "infra" / "slurm-image-builder.bicep").read_text()
         gallery = (ROOT / "infra" / "slurm-image-gallery.bicep").read_text()
         configure = (
             ROOT / "infra" / "scripts" / "configure-slurm-image.sh"
         ).read_text()
-        self.assertNotIn("containerInstanceSubnetId", builder)
         self.assertIn("defaultOutboundAccess: true", builder)
-        self.assertIn("privateLinkServiceNetworkPolicies: 'Disabled'", builder)
-        self.assertNotIn("mokutil --sb-state", builder)
+        self.assertIn("securityType: 'TrustedLaunch'", builder)
+        self.assertIn("secureBootEnabled: true", builder)
+        self.assertIn("vTpmEnabled: true", builder)
+        self.assertIn("disablePasswordAuthentication: true", builder)
+        self.assertNotIn("publicIPAddresses", builder)
+        self.assertNotIn("Microsoft.Network/publicIPAddresses", builder)
+        self.assertNotIn("Microsoft.Storage/storageAccounts", builder)
+        self.assertNotIn("Microsoft.VirtualMachineImages/imageTemplates", builder)
+        self.assertNotIn("userAssignedIdentities", builder)
         self.assertIn("TrustedLaunchSupported", gallery)
         self.assertIn("amlfs_install_method", configure)
         self.assertIn("prebuilt-kmod", configure)
         self.assertIn("modinfo -F signer lustre", configure)
         self.assertIn("BC528686B50D79E339D3721CEB3E94ADBE1229CF", configure)
+        self.assertIn("PRIVATE_SLURM_IMAGE_CONFIGURE_SUCCEEDED", configure)
         self.assertNotIn("secureBootEnabled: false", builder)
         self.assertNotIn("lustre-client-dkms", builder)
         self.assertNotIn("apt-get install -y lustre-client-dkms", configure)
@@ -182,6 +237,139 @@ class PrivateSlurmImageTests(unittest.TestCase):
         self.assertNotIn("|galleries/", campaign)
         self.assertIn("galleries/", campaign)
         self.assertIn("secureBootEnabled: true", scheduler)
+
+    def test_run_build_sequence_captures_then_cleans_before_validation(self):
+        operations = []
+        cleanups = []
+
+        def fake_run(command, *, error):
+            operations.append("run:" + command[0])
+            if command[0] == "ssh-keygen":
+                Path(command[-1] + ".pub").write_text(
+                    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISyntheticOnly\n",
+                    encoding="utf-8",
+                )
+            return ""
+
+        def fake_az(_cfg, *args, error):
+            command = " ".join(args)
+            operations.append(command)
+            if args[:3] == ("deployment", "group", "create") and any(
+                "builder-" in arg for arg in args
+            ):
+                return builder_outputs()
+            if args[:2] == ("vm", "show"):
+                return SECURITY_PROFILE
+            if args[:3] == ("vm", "run-command", "invoke") and "Build VM configuration" in error:
+                return run_command_output("PRIVATE_SLURM_IMAGE_CONFIGURE_SUCCEEDED")
+            if args[:3] == ("vm", "run-command", "invoke") and "pre-capture" in error:
+                return run_command_output('{"build_vm_pre_capture": true, "kernel": "6.17.0-1022-azure", "secure_boot": "enabled"}')
+            if args[:3] == ("vm", "run-command", "invoke") and "deprovision" in error:
+                return run_command_output("PRIVATE_SLURM_IMAGE_DEPROVISION_SUCCEEDED")
+            if args[:3] == ("sig", "image-version", "show"):
+                return version_show()
+            if args[:3] == ("vm", "run-command", "invoke") and "Image interface" in error:
+                return run_command_output(
+                    '{"interface": "private-slurm-image", "secure_boot": "enabled", '
+                    '"vtpm": "enabled", "kernel": "6.17.0-1022-azure", '
+                    '"amlfs_client": "2.17.0-24-gf517bc4", '
+                    '"amlfs_install_method": "prebuilt-kmod", '
+                    '"repository_commit": "844d2f732fe41dccdf420646f3dad0402a6a797c"}'
+                )
+            return "{}"
+
+        def fake_cleanup(_cfg, group, component):
+            cleanups.append(group)
+            operations.append("cleanup:" + group)
+
+        with (
+            patch("scripts.build_slurm_image._source_preflight"),
+            patch("scripts.build_slurm_image._image_version_count", return_value=0),
+            patch("scripts.build_slurm_image._ensure_group"),
+            patch("scripts.build_slurm_image._run", side_effect=fake_run),
+            patch("scripts.build_slurm_image._az", side_effect=fake_az),
+            patch("scripts.build_slurm_image._delete_owned_group", side_effect=fake_cleanup),
+            patch("scripts.build_slurm_image._delete_owned_image_version") as delete_version,
+        ):
+            report = run_build(config())
+
+        self.assertEqual(report["build_method"], "trusted-launch-vm-capture")
+        self.assertFalse(report["build_storage_account_created"])
+        self.assertFalse(delete_version.called)
+        self.assertIn(config().build_resource_group, cleanups)
+        expected = [
+            "deployment group create",
+            "vm run-command invoke",  # configure
+            "vm run-command invoke",  # pre-capture verify
+            "vm run-command invoke",  # deprovision
+            "vm deallocate",
+            "vm generalize",
+            "sig image-version create",
+            "cleanup:" + config().build_resource_group,
+            "vm create",
+            "vm run-command invoke",  # validation
+        ]
+        cursor = 0
+        for wanted in expected:
+            while cursor < len(operations) and wanted not in operations[cursor]:
+                cursor += 1
+            self.assertLess(cursor, len(operations), f"missing {wanted} in {operations}")
+            cursor += 1
+
+    def test_run_build_cleans_up_failures_before_and_after_capture(self):
+        for failing_error, deletes_version in (
+            ("Build VM configuration failed", False),
+            ("Build VM pre-capture verification failed", False),
+            ("Build VM deprovision failed", False),
+            ("Gallery image version capture failed", False),
+            ("Image interface validation failed", True),
+        ):
+            with self.subTest(failing_error=failing_error):
+                cleanups = []
+
+                def fake_run(command, *, error):
+                    if command[0] == "ssh-keygen":
+                        Path(command[-1] + ".pub").write_text(
+                            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISyntheticOnly\n",
+                            encoding="utf-8",
+                        )
+                    return ""
+
+                def fake_az(_cfg, *args, error):
+                    if error == failing_error:
+                        raise RuntimeError(failing_error)
+                    if args[:3] == ("deployment", "group", "create") and any(
+                        "builder-" in arg for arg in args
+                    ):
+                        return builder_outputs()
+                    if args[:2] == ("vm", "show"):
+                        return SECURITY_PROFILE
+                    if args[:3] == ("vm", "run-command", "invoke") and "configuration" in error:
+                        return run_command_output("PRIVATE_SLURM_IMAGE_CONFIGURE_SUCCEEDED")
+                    if args[:3] == ("vm", "run-command", "invoke") and "pre-capture" in error:
+                        return run_command_output('{"build_vm_pre_capture": true, "kernel": "6.17.0-1022-azure", "secure_boot": "enabled"}')
+                    if args[:3] == ("vm", "run-command", "invoke") and "deprovision" in error:
+                        return run_command_output("PRIVATE_SLURM_IMAGE_DEPROVISION_SUCCEEDED")
+                    if args[:3] == ("sig", "image-version", "show"):
+                        return version_show()
+                    return "{}"
+
+                with (
+                    patch("scripts.build_slurm_image._source_preflight"),
+                    patch("scripts.build_slurm_image._image_version_count", return_value=0),
+                    patch("scripts.build_slurm_image._ensure_group"),
+                    patch("scripts.build_slurm_image._run", side_effect=fake_run),
+                    patch("scripts.build_slurm_image._az", side_effect=fake_az),
+                    patch(
+                        "scripts.build_slurm_image._delete_owned_group",
+                        side_effect=lambda _cfg, group, _component: cleanups.append(group),
+                    ),
+                    patch("scripts.build_slurm_image._delete_owned_image_version") as delete_version,
+                ):
+                    with self.assertRaisesRegex(RuntimeError, failing_error):
+                        run_build(config())
+                self.assertIn(config().build_resource_group, cleanups)
+                self.assertEqual(delete_version.called, deletes_version)
 
 
 if __name__ == "__main__":

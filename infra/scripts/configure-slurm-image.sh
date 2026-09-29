@@ -21,13 +21,15 @@ source /etc/os-release
 [[ "$SLURM_PARTITION" =~ ^[A-Za-z0-9._-]+$ ]]
 
 export DEBIAN_FRONTEND=noninteractive
+build_workspace=/var/lib/genomics-variant-accelerator/image-build
+install -d -m 0700 "$build_workspace"
 apt-get update
 apt-get install -y --no-install-recommends \
   ca-certificates curl git gnupg jq mokutil openjdk-17-jre-headless python3 \
   samtools slurm-wlm munge sudo util-linux coreutils findutils
 
 install -d -m 0755 /etc/apt/keyrings
-key_file=/tmp/microsoft.asc
+key_file="$build_workspace/microsoft.asc"
 curl --fail --location --silent --show-error \
   https://packages.microsoft.com/keys/microsoft.asc --output "$key_file"
 key_fingerprint="$(
@@ -67,9 +69,9 @@ download_verified() {
 download_verified "$NEXTFLOW_URL" "$NEXTFLOW_SHA256" /usr/local/bin/nextflow
 chmod 0755 /usr/local/bin/nextflow
 NXF_VER="$NEXTFLOW_VERSION" NXF_HOME=/opt/nextflow nextflow -version
-download_verified "$AZCOPY_URL" "$AZCOPY_SHA256" /tmp/azcopy.deb
-apt-get install -y --no-install-recommends /tmp/azcopy.deb
-rm -f /tmp/azcopy.deb
+download_verified "$AZCOPY_URL" "$AZCOPY_SHA256" "$build_workspace/azcopy.deb"
+apt-get install -y --no-install-recommends "$build_workspace/azcopy.deb"
+rm -f "$build_workspace/azcopy.deb"
 azcopy --version | grep -F "$AZCOPY_VERSION"
 
 rm -rf "$REPOSITORY_PATH"
@@ -154,7 +156,7 @@ jq -n \
   --arg repositoryPath "$REPOSITORY_PATH" \
   --arg slurmPartition "$SLURM_PARTITION" \
   '{schema_version:1,os:"Canonical Ubuntu 24.04 LTS Gen2",
-    security_type:"TrustedLaunchSupported",secure_boot_required:true,
+    security_type:"TrustedLaunch",secure_boot_required:true,
     vtpm_required:true,kernel:$kernel,amlfs_client:$amlfs,
     amlfs_install_method:"prebuilt-kmod",
     amlfs_package_version:$amlfsPackageVersion,nextflow:$nextflow,
@@ -164,4 +166,5 @@ jq -n \
   >/etc/genomics-variant-accelerator/image-manifest.json
 
 apt-get clean
-rm -rf /var/lib/apt/lists/* /tmp/*
+rm -rf /var/lib/apt/lists/* "$build_workspace"
+echo "PRIVATE_SLURM_IMAGE_CONFIGURE_SUCCEEDED"

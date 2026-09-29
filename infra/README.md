@@ -59,11 +59,13 @@ this change; it has not been deployed or accepted live.
 `infra/slurm-image-gallery.bicep`, `infra/slurm-image-builder.bicep`,
 `infra/scripts/configure-slurm-image.sh`, and
 `scripts/build_slurm_image.py` define the private image prerequisite for the
-campaign. The implementation uses Azure VM Image Builder with a private build
-subnet and service-managed isolated-build networking, a user-assigned identity,
-a custom empty staging resource group, and Azure Compute Gallery distribution.
-The image definition is Ubuntu 24.04 Gen2 with
-`SecurityType=TrustedLaunchSupported`.
+campaign. The implementation builds a no-public-IP Ubuntu 24.04 Gen2 Trusted
+Launch VM in a disposable private build resource group, configures it through
+VM Run Command, verifies the pinned kernel and Secure Boot before capture,
+deprovisions and generalizes the VM, and captures it directly into Azure
+Compute Gallery. The image definition remains Ubuntu 24.04 Gen2 with
+`SecurityType=TrustedLaunchSupported`, which is the gallery feature that
+permits Trusted Launch VM deployments from the generalized image.
 
 The build pins the Canonical source version and running Azure kernel, installs
 the matching Microsoft prebuilt AMLFS kmod package rather than DKMS, verifies
@@ -75,24 +77,25 @@ be fetchable and must already contain the audited no-Docker Slurm profile,
 explicit Lustre work directory, durable URI options, and reference-manifest
 gate.
 
-The orchestrator refuses an existing gallery image version, grants the image
-identity only the required network, gallery-publication, and custom-staging
-roles, and validates the retained version on a separate no-public-IP Trusted
-Launch VM with Secure Boot and vTPM enabled. Validation checks the Microsoft-
-signed Lustre module, `mount.lustre`, required tools and services, Slurm
-partition, repository commit/interface, and unchanged VM security profile.
-Image-template, staging, build, and validation resources are synchronously
+The orchestrator refuses an existing gallery image version and creates no build
+storage account, shared key, SAS, public IP, NAT gateway, Azure VM Image Builder
+template, AIB identity, or AIB staging resource group. It validates the retained
+version on a separate no-public-IP Trusted Launch VM with Secure Boot and vTPM
+enabled. Validation checks the Microsoft-signed Lustre module, `mount.lustre`,
+required tools and services, Slurm partition, repository commit/interface, and
+unchanged VM security profile. Build and validation resources are synchronously
 removed after success or failure. An image version is retained only after full
 validation; an owned unvalidated version is deleted, and cleanup failures are
 reported rather than suppressed.
 
 Recovery validation on September 28, 2026 compiled both image Bicep templates,
 passed the focused Python tests and static configuration validation, and
-confirmed the pinned source is Gen2 and `TrustedLaunchSupported`. The bounded
-live action stopped before any Azure resource creation because the currently
-pinned commit does not contain the audited Slurm runtime interface; those
-changes remain uncommitted, and this task does not create a commit. No validated
-gallery image exists yet.
+confirmed the pinned source is Gen2 and `TrustedLaunchSupported`. On September
+29, 2026 the Image Builder path was replaced before live acceptance because AIB
+creates an internal staging storage account and writes VHDs with shared-key
+access, which the subscription policy rejects. The replacement Trusted Launch
+VM capture path is locally tested and Bicep-compiled, but no live capture has
+yet been validated and no validated gallery image exists yet.
 
 Azure operations require explicit task-level authorization. The September 28
 image recovery included read-only source/quota checks and one bounded live

@@ -6,11 +6,11 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,11 +21,10 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parents[1]
 GALLERY_TEMPLATE = ROOT / "infra" / "slurm-image-gallery.bicep"
 BUILDER_TEMPLATE = ROOT / "infra" / "slurm-image-builder.bicep"
+CONFIGURE_SCRIPT = ROOT / "infra" / "scripts" / "configure-slurm-image.sh"
 PROJECT = "genomics-variant-accelerator"
 BUILD_COMPONENT = "hpc-image-build"
 IMAGE_COMPONENT = "private-slurm-image"
-GALLERY_PUBLISHER_ROLE = "Compute Gallery Artifacts Publisher"
-CONTRIBUTOR_ROLE = "Contributor"
 IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9-]{2,23}$")
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -66,10 +65,6 @@ class ImageBuildConfig:
     @property
     def validation_resource_group(self) -> str:
         return f"rg-genomics-image-validate-{self.build_id}"
-
-    @property
-    def staging_resource_group(self) -> str:
-        return f"rg-genomics-image-stage-{self.build_id}"
 
     @property
     def image_definition_id(self) -> str:
@@ -172,9 +167,11 @@ def validate_config(config: ImageBuildConfig) -> dict[str, Any]:
     return {
         "mode": "local-static-validation",
         "azure_resources_created": False,
+        "build_method": "trusted-launch-vm-capture",
         "source_image_urn": source_urn,
         "source_kernel": config.source_kernel,
         "amlfs_install_method": "prebuilt-kmod",
+        "build_storage_account_created": False,
         "image_version_id": config.image_version_id,
         "repository_commit": config.repository_commit,
         "repository_path": config.repository_path,
@@ -195,10 +192,15 @@ def _run(arguments: list[str], *, error: str) -> str:
             text=True,
             check=False,
             shell=True,
+            stdin=subprocess.DEVNULL,
         )
     else:
         completed = subprocess.run(
-            command, capture_output=True, text=True, check=False
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            stdin=subprocess.DEVNULL,
         )
     if completed.returncode:
         detail = (completed.stderr or completed.stdout).strip()
@@ -441,9 +443,6 @@ def _source_preflight(config: ImageBuildConfig) -> None:
     for namespace in (
         "Microsoft.Compute",
         "Microsoft.Network",
-        "Microsoft.ContainerInstance",
-        "Microsoft.ManagedIdentity",
-        "Microsoft.VirtualMachineImages",
     ):
         state = _az(
             config, "provider", "show", "--namespace", namespace,
@@ -468,37 +467,14 @@ def _source_preflight(config: ImageBuildConfig) -> None:
         raise RuntimeError("Pinned source image is not TrustedLaunchSupported.")
 
 
-def _builder_parameters(
-    config: ImageBuildConfig, *, deploy_image_template: bool
-) -> list[str]:
+def _builder_parameters(config: ImageBuildConfig, admin_public_key: str) -> list[str]:
     values = {
         "location": config.location,
         "environment": config.environment,
         "buildId": config.build_id,
-        "stagingResourceGroupId": (
-            f"/subscriptions/{config.subscription_id}/resourceGroups/"
-            f"{config.staging_resource_group}"
-        ),
-        "galleryResourceGroupName": config.gallery_resource_group,
-        "galleryName": config.gallery_name,
-        "imageDefinitionName": config.image_definition_name,
-        "galleryImageVersion": config.image_version,
         "sourceImageVersion": config.source_image_version,
-        "sourceKernel": config.source_kernel,
-        "amlfsVersion": config.amlfs_version,
-        "amlfsPackageVersion": config.amlfs_package_version,
-        "nextflowVersion": config.nextflow_version,
-        "nextflowSha256": config.nextflow_sha256,
-        "nextflowUrl": config.nextflow_url,
-        "azcopyVersion": config.azcopy_version,
-        "azcopySha256": config.azcopy_sha256,
-        "azcopyUrl": config.azcopy_url,
-        "repositoryUrl": config.repository_url,
-        "repositoryCommit": config.repository_commit,
-        "repositoryPath": config.repository_path,
-        "slurmPartition": config.slurm_partition,
         "buildVmSize": config.build_vm_size,
-        "deployImageTemplate": str(deploy_image_template).lower(),
+        "adminPublicKey": admin_public_key,
     }
     return [f"{key}={value}" for key, value in values.items()]
 
@@ -563,11 +539,97 @@ PY
 """
 
 
+def _run_command_message(invocation: dict[str, Any]) -> str:
+    return "\n".join(item.get("message", "") for item in invocation.get("value", []))
+
+
+def _quote_exports(values: dict[str, str]) -> str:
+    return "\n".join(
+        f"export {name}={shlex.quote(value)}" for name, value in values.items()
+    )
+
+
+def _configure_environment(config: ImageBuildConfig) -> dict[str, str]:
+    return {
+        "PINNED_KERNEL": config.source_kernel,
+        "AMLFS_VERSION": config.amlfs_version,
+        "AMLFS_PACKAGE_VERSION": config.amlfs_package_version,
+        "NEXTFLOW_VERSION": config.nextflow_version,
+        "NEXTFLOW_SHA256": config.nextflow_sha256,
+        "NEXTFLOW_URL": config.nextflow_url,
+        "AZCOPY_VERSION": config.azcopy_version,
+        "AZCOPY_SHA256": config.azcopy_sha256,
+        "AZCOPY_URL": config.azcopy_url,
+        "REPOSITORY_URL": config.repository_url,
+        "REPOSITORY_COMMIT": config.repository_commit,
+        "REPOSITORY_PATH": config.repository_path,
+        "SLURM_PARTITION": config.slurm_partition,
+    }
+
+
+def _write_prefixed_script(config: ImageBuildConfig, directory: Path) -> Path:
+    script_path = directory / "configure-slurm-image-run-command.sh"
+    body = CONFIGURE_SCRIPT.read_text(encoding="utf-8")
+    script_path.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -Eeuo pipefail\n"
+        + _quote_exports(_configure_environment(config))
+        + "\n"
+        + body,
+        encoding="utf-8",
+    )
+    return script_path
+
+
+def _verify_build_vm_script(config: ImageBuildConfig) -> str:
+    return f"""set -Eeuo pipefail
+test "$(uname -r)" = "{config.source_kernel}"
+mokutil --sb-state | grep -F "SecureBoot enabled"
+python3 - <<'PY'
+import json
+print(json.dumps({{"build_vm_pre_capture": True, "kernel": "{config.source_kernel}", "secure_boot": "enabled"}}, sort_keys=True))
+PY
+"""
+
+
+def _deprovision_script() -> str:
+    return """set -Eeuo pipefail
+sudo cloud-init clean --logs --seed || true
+sudo rm -rf /var/lib/cloud/instances /var/lib/cloud/instance
+sudo truncate -s 0 /etc/machine-id
+sudo rm -f /var/lib/dbus/machine-id
+sudo ln -sf /etc/machine-id /var/lib/dbus/machine-id
+sudo waagent -deprovision+user -force
+echo "PRIVATE_SLURM_IMAGE_DEPROVISION_SUCCEEDED"
+"""
+
+
+def _image_version_tags(config: ImageBuildConfig) -> list[str]:
+    tags = {
+        "project": PROJECT,
+        "component": IMAGE_COMPONENT,
+        "environment": config.environment,
+        "buildId": config.build_id,
+        "sourceImage": "Canonical:ubuntu-24_04-lts:server:" + config.source_image_version,
+        "sourceKernel": config.source_kernel,
+        "amlfsClient": config.amlfs_version,
+        "amlfsInstall": "prebuilt-kmod",
+        "secureBoot": "required",
+        "vtpm": "required",
+        "repositoryCommit": config.repository_commit,
+        "repositoryPath": config.repository_path,
+        "slurmPartition": config.slurm_partition,
+        "buildMethod": "trusted-launch-vm-capture",
+        "buildStorageAccountCreated": "false",
+    }
+    return [f"{key}={value}" for key, value in tags.items()]
+
+
 def run_build(config: ImageBuildConfig) -> dict[str, Any]:
     validate_config(config)
     _source_preflight(config)
     image_validated = False
-    image_build_started = False
+    image_version_created = False
     build_error: Exception | None = None
     result: dict[str, Any] | None = None
     evidence: dict[str, Any] = {
@@ -577,6 +639,8 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
         "source_image_version": config.source_image_version,
         "source_kernel": config.source_kernel,
         "amlfs_install_method": "prebuilt-kmod",
+        "build_method": "trusted-launch-vm-capture",
+        "build_storage_account_created": False,
         "secure_boot": True,
         "vtpm": True,
     }
@@ -600,96 +664,104 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
             raise RuntimeError(
                 "Refusing to replace or reuse an existing gallery image version."
             )
-        _ensure_group(config, config.build_resource_group, BUILD_COMPONENT)
-        _ensure_group(config, config.staging_resource_group, BUILD_COMPONENT)
-        _ensure_group(config, config.validation_resource_group, BUILD_COMPONENT)
-        deployment = json.loads(_az(
-            config, "deployment", "group", "create",
-            "--resource-group", config.build_resource_group,
-            "--name", f"builder-{config.build_id}",
-            "--template-file", str(BUILDER_TEMPLATE),
-            "--parameters", *_builder_parameters(
-                config, deploy_image_template=False
-            ),
-            "-o", "json", error="Image Builder deployment failed",
-        ))
-        outputs = deployment["properties"]["outputs"]
-        identity_id = outputs["identityId"]["value"]
-        principal_id = _az(
-            config, "identity", "show", "--ids", identity_id,
-            "--query", "principalId", "-o", "tsv",
-            error="Could not resolve Image Builder identity",
-        ).strip()
-        _az(
-            config, "role", "assignment", "create",
-            "--assignee-object-id", principal_id,
-            "--assignee-principal-type", "ServicePrincipal",
-            "--role", GALLERY_PUBLISHER_ROLE,
-            "--scope", config.image_definition_id,
-            "-o", "none", error="Could not grant gallery publication",
-        )
-        _az(
-            config, "role", "assignment", "create",
-            "--assignee-object-id", principal_id,
-            "--assignee-principal-type", "ServicePrincipal",
-            "--role", CONTRIBUTOR_ROLE,
-            "--scope", (
-                f"/subscriptions/{config.subscription_id}/resourceGroups/"
-                f"{config.staging_resource_group}"
-            ),
-            "-o", "none", error="Could not grant staging resource-group access",
-        )
-        deployment = json.loads(_az(
-            config, "deployment", "group", "create",
-            "--resource-group", config.build_resource_group,
-            "--name", f"builder-{config.build_id}",
-            "--template-file", str(BUILDER_TEMPLATE),
-            "--parameters", *_builder_parameters(
-                config, deploy_image_template=True
-            ),
-            "-o", "json", error="Image Builder template deployment failed",
-        ))
-        outputs = deployment["properties"]["outputs"]
-        template_name = outputs["imageTemplateName"]["value"]
-        last_error = ""
-        for attempt in range(6):
-            try:
-                _az(
-                    config, "image", "builder", "run",
-                    "--resource-group", config.build_resource_group,
-                    "--name", template_name,
-                    "--no-wait", "-o", "none",
-                    error="Image Builder run could not start",
-                )
-                image_build_started = True
-                break
-            except RuntimeError as error:
-                last_error = str(error)
-                if attempt == 5:
-                    raise
-                time.sleep(20 * (attempt + 1))
-        else:
-            raise RuntimeError(last_error)
 
-        deadline = time.monotonic() + 7200
-        while time.monotonic() < deadline:
-            state = json.loads(_az(
-                config, "image", "builder", "show",
+        _ensure_group(config, config.build_resource_group, BUILD_COMPONENT)
+        with tempfile.TemporaryDirectory() as temporary:
+            key_path = Path(temporary) / "build_key"
+            _run(
+                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key_path)],
+                error="Could not create temporary build SSH key",
+            )
+            public_key = key_path.with_suffix(".pub").read_text(encoding="utf-8").strip()
+            deployment = json.loads(_az(
+                config, "deployment", "group", "create",
                 "--resource-group", config.build_resource_group,
-                "--name", template_name,
-                "--query", "lastRunStatus", "-o", "json",
-                error="Could not read Image Builder status",
+                "--name", f"builder-{config.build_id}",
+                "--template-file", str(BUILDER_TEMPLATE),
+                "--parameters", *_builder_parameters(config, public_key),
+                "-o", "json", error="Trusted Launch build VM deployment failed",
             ))
-            run_state = state.get("runState")
-            if run_state == "Succeeded":
-                break
-            if run_state in {"Failed", "Canceled", "PartiallySucceeded"}:
-                raise RuntimeError(
-                    "Image Builder failed: " + json.dumps(state, sort_keys=True)
-                )
-            time.sleep(30)
-        else:
-            raise RuntimeError("Image Builder exceeded the bounded 120-minute wait.")
+        outputs = deployment["properties"]["outputs"]
+        build_vm_id = outputs["buildVmId"]["value"]
+        build_vm_name = outputs["buildVmName"]["value"]
+
+        security_before = json.loads(_az(
+            config, "vm", "show", "-g", config.build_resource_group,
+            "-n", build_vm_name, "--query", "securityProfile", "-o", "json",
+            error="Could not inspect build VM security profile",
+        ))
+        if security_before != {
+            "securityType": "TrustedLaunch",
+            "uefiSettings": {"secureBootEnabled": True, "vTpmEnabled": True},
+        }:
+            raise RuntimeError("Build VM security profile is not exact Trusted Launch.")
+
+        with tempfile.TemporaryDirectory() as temporary:
+            script_file = _write_prefixed_script(config, Path(temporary))
+            invocation = json.loads(_az(
+                config, "vm", "run-command", "invoke",
+                "-g", config.build_resource_group, "-n", build_vm_name,
+                "--command-id", "RunShellScript",
+                "--scripts", "@" + str(script_file),
+                "-o", "json", error="Build VM configuration failed",
+            ))
+        configure_message = _run_command_message(invocation)
+        if "PRIVATE_SLURM_IMAGE_CONFIGURE_SUCCEEDED" not in configure_message:
+            raise RuntimeError("Build VM configuration did not emit the success marker.")
+
+        invocation = json.loads(_az(
+            config, "vm", "run-command", "invoke",
+            "-g", config.build_resource_group, "-n", build_vm_name,
+            "--command-id", "RunShellScript",
+            "--scripts", _verify_build_vm_script(config),
+            "-o", "json", error="Build VM pre-capture verification failed",
+        ))
+        verify_message = _run_command_message(invocation)
+        marker = next(
+            (line for line in verify_message.splitlines() if '"build_vm_pre_capture": true' in line),
+            None,
+        )
+        if marker is None:
+            raise RuntimeError("Build VM pre-capture verification evidence is missing.")
+        pre_capture_evidence = json.loads(marker)
+
+        invocation = json.loads(_az(
+            config, "vm", "run-command", "invoke",
+            "-g", config.build_resource_group, "-n", build_vm_name,
+            "--command-id", "RunShellScript",
+            "--scripts", _deprovision_script(),
+            "-o", "json", error="Build VM deprovision failed",
+        ))
+        if "PRIVATE_SLURM_IMAGE_DEPROVISION_SUCCEEDED" not in _run_command_message(invocation):
+            raise RuntimeError("Build VM deprovision did not emit the success marker.")
+
+        _az(
+            config, "vm", "deallocate",
+            "--resource-group", config.build_resource_group,
+            "--name", build_vm_name,
+            "-o", "none", error="Build VM deallocation failed",
+        )
+        _az(
+            config, "vm", "generalize",
+            "--resource-group", config.build_resource_group,
+            "--name", build_vm_name,
+            "-o", "none", error="Build VM generalization failed",
+        )
+        _az(
+            config, "sig", "image-version", "create",
+            "--resource-group", config.gallery_resource_group,
+            "--gallery-name", config.gallery_name,
+            "--gallery-image-definition", config.image_definition_name,
+            "--gallery-image-version", config.image_version,
+            "--virtual-machine", build_vm_id,
+            "--target-regions", config.location,
+            "--replica-count", "1",
+            "--storage-account-type", "Standard_LRS",
+            "--exclude-from-latest", "false",
+            "--tags", *_image_version_tags(config),
+            "-o", "none", error="Gallery image version capture failed",
+        )
+        image_version_created = True
 
         version = json.loads(_az(
             config, "sig", "image-version", "show",
@@ -708,10 +780,15 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
             ("amlfsInstall", "prebuilt-kmod"),
             ("secureBoot", "required"),
             ("vtpm", "required"),
+            ("buildMethod", "trusted-launch-vm-capture"),
+            ("buildStorageAccountCreated", "false"),
         ):
             if tags.get(key) != value:
                 raise RuntimeError(f"Gallery image version tag {key} is invalid.")
 
+        _delete_owned_group(config, config.build_resource_group, BUILD_COMPONENT)
+
+        _ensure_group(config, config.validation_resource_group, BUILD_COMPONENT)
         with tempfile.TemporaryDirectory() as temporary:
             key_path = Path(temporary) / "validation_key"
             _run(
@@ -721,9 +798,7 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
             public_key = key_path.with_suffix(".pub").read_text(encoding="utf-8").strip()
             validation_tags = [
                 f"{key}={value}"
-                for key, value in _expected_group_tags(
-                    config, BUILD_COMPONENT
-                ).items()
+                for key, value in _expected_group_tags(config, BUILD_COMPONENT).items()
             ]
             _az(
                 config, "vm", "create",
@@ -736,7 +811,6 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
                 "--ssh-key-values", public_key,
                 "--public-ip-address", "",
                 "--nsg", "",
-                "--subnet", outputs["buildSubnetId"]["value"],
                 "--security-type", "TrustedLaunch",
                 "--enable-secure-boot", "true",
                 "--enable-vtpm", "true",
@@ -761,7 +835,7 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
             "--scripts", _validation_script(config),
             "-o", "json", error="Image interface validation failed",
         ))
-        message = "\n".join(item.get("message", "") for item in invocation.get("value", []))
+        message = _run_command_message(invocation)
         marker = next(
             (line for line in message.splitlines() if '"interface": "private-slurm-image"' in line),
             None,
@@ -775,6 +849,7 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
         ))
         if security_after != security_before:
             raise RuntimeError("Validation changed the VM security profile.")
+        evidence["build_vm_pre_capture"] = pre_capture_evidence
         evidence["interface"] = json.loads(marker)
         evidence["security_profile_unchanged"] = True
         evidence["validated"] = True
@@ -784,7 +859,7 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
         build_error = error
     finally:
         cleanup_errors: list[str] = []
-        if not image_validated and image_build_started:
+        if not image_validated and image_version_created:
             try:
                 _delete_owned_image_version(config)
             except Exception as error:
@@ -792,7 +867,6 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
         for group_name in (
             config.validation_resource_group,
             config.build_resource_group,
-            config.staging_resource_group,
         ):
             try:
                 _delete_owned_group(config, group_name, BUILD_COMPONENT)
