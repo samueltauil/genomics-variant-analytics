@@ -81,6 +81,7 @@ class PrivateSlurmImageTests(unittest.TestCase):
         ).read_text()
         self.assertNotIn("containerInstanceSubnetId", builder)
         self.assertIn("defaultOutboundAccess: true", builder)
+        self.assertIn("privateLinkServiceNetworkPolicies: 'Disabled'", builder)
         self.assertNotIn("mokutil --sb-state", builder)
         self.assertIn("TrustedLaunchSupported", gallery)
         self.assertIn("amlfs_install_method", configure)

@@ -94,6 +94,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2024-05-01' = {
         properties: {
           addressPrefix: buildSubnetPrefix
           defaultOutboundAccess: true
+          privateLinkServiceNetworkPolicies: 'Disabled'
           networkSecurityGroup: {
             id: nsg.id
           }
