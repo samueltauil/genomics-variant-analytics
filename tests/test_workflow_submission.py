@@ -254,7 +254,7 @@ class WorkflowSubmissionTests(unittest.TestCase):
         request = {
             "run_id": "SYN-REPOSITORY-REFERENCE",
             "workflow_id": "genomics-secondary-analysis",
-            "workflow_version": "v0.1.0",
+            "workflow_version": "v0.2.0",
             "reference_build": entry["name"],
             "reference_version": entry["version"],
             "reference_manifest_sha256": digest(manifest),

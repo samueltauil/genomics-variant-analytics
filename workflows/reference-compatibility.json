@@ -3,7 +3,7 @@
   "workflows": [
     {
       "workflow_id": "genomics-secondary-analysis",
-      "workflow_version": "v0.1.0",
+      "workflow_version": "v0.2.0",
       "reference_manifest_sha256": "7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83",
       "reference_sets": [
         [

@@ -149,7 +149,7 @@ def validate_config(config: CampaignConfig) -> dict[str, Any]:
     request = {
         "run_id": f"SYN-HPC-{config.campaign_id}",
         "workflow_id": "genomics-secondary-analysis",
-        "workflow_version": "v0.1.0",
+        "workflow_version": "v0.2.0",
         "reference_build": _text(config.reference_build, "reference_build"),
         "reference_version": _text(config.reference_version, "reference_version"),
         "reference_manifest_sha256": config.reference_manifest_sha256,

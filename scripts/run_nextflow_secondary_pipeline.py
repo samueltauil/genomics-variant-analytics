@@ -43,7 +43,7 @@ except ModuleNotFoundError:
 
 
 WORKFLOW_ID = "genomics-secondary-analysis"
-WORKFLOW_VERSION = "v0.1.0"
+WORKFLOW_VERSION = "v0.2.0"
 STAGE_ORDER = ("quality_control", "alignment", "variant_calling")
 PROCESS_TO_STAGE = {
     "QUALITY_CONTROL": "quality_control",
@@ -105,7 +105,10 @@ def _validate_durable_uri(value: str | None, label: str) -> str | None:
 
 
 def _artifact_uris(directory: Path, durable_base_uri: str | None) -> list[str]:
-    paths = sorted(path for path in directory.glob("*") if path.is_file())
+    paths = sorted(
+        (path for path in directory.glob("*") if path.is_file()),
+        key=lambda path: (path.name.casefold(), path.name),
+    )
     if durable_base_uri:
         return [f"{durable_base_uri}/{quote(path.name)}" for path in paths]
     return [path.resolve().as_uri() for path in paths]

@@ -35,7 +35,7 @@ except ModuleNotFoundError:
 
 
 WORKFLOW_ID = "genomics-secondary-analysis"
-WORKFLOW_VERSION = "v0.1.0"
+WORKFLOW_VERSION = "v0.2.0"
 
 
 def execute(*, run_id: str, work_dir: Path, publish_dir: Path, provenance_db: Path,

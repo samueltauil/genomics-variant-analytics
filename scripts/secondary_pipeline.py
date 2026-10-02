@@ -43,6 +43,8 @@ SYNTHETIC_REFERENCE_MANIFEST_PATH = (
     REPOSITORY_ROOT / "workflows" / "synthetic-reference-manifest.json"
 )
 REFERENCE_COMPATIBILITY_PATH = REPOSITORY_ROOT / "workflows" / "reference-compatibility.json"
+WORKFLOW_ID = "genomics-secondary-analysis"
+WORKFLOW_VERSION = "v0.2.0"
 
 
 def _canonical_digest(value: Any) -> str:
@@ -114,8 +116,8 @@ def validate_synthetic_reference_bundle(
     reference_manifest_sha256: str,
 ) -> None:
     identity = validate_synthetic_reference_submission(
-        "genomics-secondary-analysis",
-        "v0.1.0",
+        WORKFLOW_ID,
+        WORKFLOW_VERSION,
         reference_build,
         reference_version,
         reference_manifest_sha256,
