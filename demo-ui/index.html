@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Genomics Variant Analytics: local demo</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="container header-inner">
+        <div>
+          <span class="product">Genomics Variant Analytics</span>
+          <span class="product-sub">Local demo console</span>
+        </div>
+        <span class="env-tag" title="This server binds to 127.0.0.1 and exposes no Azure actions">Local demo · synthetic data · no Azure actions</span>
+      </div>
+    </header>
+
+    <main class="container">
+      <section class="intro">
+        <h1>Synthetic component walkthrough</h1>
+        <p>
+          Run the accelerator's local components against synthetic data and review
+          the output each one produces. Nothing on this page provisions or contacts
+          Azure resources.
+        </p>
+      </section>
+
+      <aside class="notice" aria-label="Demo scope">
+        <strong>Scope.</strong>
+        Landing metadata and analysis are separate harnesses. The generated landing
+        placeholders do not feed the analysis run.
+        <a href="/docs/solution-engineer-guide.md" target="_blank" rel="noreferrer">Solution engineer guide</a>
+      </aside>
+
+      <section class="panel" aria-labelledby="steps-title">
+        <div class="panel-head">
+          <h2 id="steps-title">Steps</h2>
+          <span class="panel-meta">Run step 1 first. Steps 2 to 4 are independent.</span>
+        </div>
+        <ol class="steps">
+          <li class="step">
+            <span class="step-index">1</span>
+            <div class="step-body">
+              <h3>Validate sample manifest</h3>
+              <p>Checks synthetic identities and the declared source and reference. Metadata only; no genomic payload is downloaded.</p>
+            </div>
+            <span class="status" data-status="manifest" data-state="ready">Ready</span>
+            <button class="btn" data-action="manifest" data-label="Run">Run</button>
+          </li>
+          <li class="step">
+            <span class="step-index">2</span>
+            <div class="step-body">
+              <h3>Build landing layout</h3>
+              <p>Creates 34 small synthetic placeholder files in the instrument folder layout and verifies the local inventory.</p>
+            </div>
+            <span class="status" data-status="landing" data-state="ready">Ready</span>
+            <button class="btn" data-action="landing" data-label="Run">Run</button>
+          </li>
+          <li class="step">
+            <span class="step-index">3</span>
+            <div class="step-body">
+              <h3>Run synthetic analysis</h3>
+              <p>Generates synthetic reads, runs the local pipeline stages, and records provenance with an explicit reference build, version, and manifest digest.</p>
+            </div>
+            <span class="status" data-status="pipeline" data-state="ready">Ready</span>
+            <button class="btn" data-action="pipeline" data-label="Run">Run</button>
+          </li>
+          <li class="step">
+            <span class="step-index">4</span>
+            <div class="step-body">
+              <h3>Rehearse safeguards</h3>
+              <p>Exercises a failed transfer, a rejected variant row, and a denied access attempt, and compares each with its expected response.</p>
+            </div>
+            <span class="status" data-status="safeguards" data-state="ready">Ready</span>
+            <button class="btn" data-action="safeguards" data-label="Run">Run</button>
+          </li>
+        </ol>
+      </section>
+
+      <section class="panel" aria-labelledby="results-title" aria-live="polite">
+        <div class="panel-head">
+          <h2 id="results-title">Results</h2>
+          <button class="btn btn-secondary" id="reset-button">Reset session</button>
+        </div>
+        <div class="results" id="results">
+          <p class="empty" id="empty-state">No results yet. Run a step to see its output.</p>
+        </div>
+      </section>
+
+      <section class="limits" aria-labelledby="limits-title">
+        <h2 id="limits-title">Limitations</h2>
+        <p>
+          The local variant store and analytics use SQLite. The analysis stages are
+          demonstration logic and are not biologically validated. This console is not
+          an end-to-end Azure deployment, a compliance result, or a clinical decision
+          system. See <a href="/docs/coverage.md" target="_blank" rel="noreferrer">capability coverage</a>
+          for what has been demonstrated.
+        </p>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="container">
+        Demo solution accelerator and reference architecture built from validated patterns. Not a released Microsoft product.
+      </div>
+    </footer>
+  </body>
+</html>

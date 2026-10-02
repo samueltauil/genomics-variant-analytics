@@ -61,7 +61,7 @@
     },
     {
       "path": "README.md",
-      "line": 72,
+      "line": 62,
       "boundary": "compliance",
       "rule": "automatic-compliance",
       "text": "Describe governance as configurable controls, not a compliance outcome. Describe AI-assisted analysis as exploratory, not clinical decision support. Do not imply an unverified customer deployment.",
@@ -69,7 +69,7 @@
     },
     {
       "path": "README.md",
-      "line": 72,
+      "line": 62,
       "boundary": "clinical-use",
       "rule": "clinical-output",
       "text": "Describe governance as configurable controls, not a compliance outcome. Describe AI-assisted analysis as exploratory, not clinical decision support. Do not imply an unverified customer deployment.",
@@ -272,12 +272,12 @@
       "line": 3,
       "boundary": "released-blueprint",
       "rule": "released-offering",
-      "text": "Run a useful demo without pretending the whole architecture is deployed. This repository is a demo solution accelerator and reference architecture, not a released Microsoft blueprint or a turnkey service.",
+      "text": "Run a useful demo without pretending the whole architecture is deployed. This repository is a demo solution accelerator and reference architecture, not a released Microsoft blueprint or a turnkey service. The browser UI is the recommended way to present the local synthetic walkthrough.",
       "disposition": "explicitly negated or prohibited"
     },
     {
       "path": "docs/solution-engineer-guide.md",
-      "line": 103,
+      "line": 111,
       "boundary": "clinical-use",
       "rule": "clinical-output",
       "text": "The placeholder landing files do not feed the secondary-analysis run. These independent harnesses teach the component contracts, not an integrated data path or an end-to-end Azure deployment. The local variant store, governed queries, and view models use SQLite and synthetic records. They are not a deployed Delta table, analytics workspace, SQL endpoint, dashboard, or governed AI service. AI-assisted analysis is exploratory, not a clinical determination.",
@@ -285,7 +285,7 @@
     },
     {
       "path": "docs/solution-engineer-guide.md",
-      "line": 105,
+      "line": 113,
       "boundary": "released-blueprint",
       "rule": "released-offering",
       "text": "For a customer-facing walkthrough, label each statement as **shown locally**, **partially demonstrated**, or **not yet accepted live**. Do not claim automatic compliance, clinical decision support, a released Microsoft product, or a confirmed customer deployment.",

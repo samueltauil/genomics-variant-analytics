@@ -1,6 +1,14 @@
 # Solution engineer execution guide
 
-Run a useful demo without pretending the whole architecture is deployed. This repository is a demo solution accelerator and reference architecture, not a released Microsoft blueprint or a turnkey service.
+Run a useful demo without pretending the whole architecture is deployed. This repository is a demo solution accelerator and reference architecture, not a released Microsoft blueprint or a turnkey service. The browser UI is the recommended way to present the local synthetic walkthrough.
+
+Start it from the repository root:
+
+```powershell
+python -m scripts.demo_ui
+```
+
+Open the `http://127.0.0.1:8765/` address printed by the server. The page gives you buttons for each local step and shows the observed outputs. Press Ctrl+C in the same terminal to stop the server and remove its temporary session data. The UI binds to loopback only and exposes no Azure actions. Use the command-line steps below only when rehearsing or debugging a component outside the presentation.
 
 ## Pick the right route
 
