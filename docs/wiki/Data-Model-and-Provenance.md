@@ -1,6 +1,6 @@
 # Data Model and Provenance
 
-**Variant store and metadata lineage implemented locally as of 2026-09-19.** This page distinguishes the local synthetic Delta variant-store and metadata harnesses, both merged into `main`, from a deployed cloud service. Read the linked specs before choosing ingestion libraries or physical table layouts.
+**Variant store and metadata lineage status as of 2026-09-29:** the exact 20-field variant store and metadata lineage are implemented locally with synthetic harnesses. This page distinguishes those local implementations from a deployed cloud service. Read the linked specs before choosing ingestion libraries or physical table layouts.
 
 ## Variant Records
 

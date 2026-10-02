@@ -76,6 +76,14 @@ class DemoPreflightTests(unittest.TestCase):
         self.assertEqual(report["Mode"], "snapshot-preflight")
         self.assertTrue(all(check["Status"] == "PASS" for check in report["Checks"]))
 
+    def test_local_preflight_is_not_ready_while_azure_checks_are_unverified(self):
+        result = run_pwsh()
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        self.assertFalse(report["Ready"])
+        self.assertGreater(report["UnverifiedChecks"], 0)
+        self.assertTrue(any(check["Status"] == "UNVERIFIED" for check in report["Checks"]))
+
     def test_deploy_runs_preflight_before_azure_resource_lookup(self):
         deploy = (ROOT / "scripts" / "Deploy-Accelerator.ps1").read_text()
         self.assertLess(

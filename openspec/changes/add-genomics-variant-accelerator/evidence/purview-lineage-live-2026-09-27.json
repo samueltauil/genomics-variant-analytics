@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "observed_on": "2026-09-24",
+  "reconciled_on": "2026-09-27",
+  "scope": "OpenSpec task 3.4 live Microsoft Purview lineage verification",
+  "data_handling": {
+    "metadata_only": true,
+    "synthetic_identifiers_only": true,
+    "genomic_payload_committed": false,
+    "sensitive_environment_identifiers_redacted": true
+  },
+  "network_and_identity": {
+    "purview_public_network_access": "Disabled",
+    "purview_managed_resources_public_network_access": "Disabled",
+    "data_factory_public_network_access": "Disabled",
+    "data_factory_authentication": "system-assigned managed identity for lineage push",
+    "collection_role": "Data Curator on the root collection",
+    "approved_managed_private_endpoint_groups": [
+      "account",
+      "blob",
+      "queue",
+      "namespace"
+    ]
+  },
+  "deployment": {
+    "purview_account_api_version": "2021-12-01",
+    "managed_event_hub_state": "Enabled",
+    "managed_ingestion_endpoints_ready": true,
+    "bicep_deployment_state": "Succeeded"
+  },
+  "copy_activity": {
+    "source_type": "AzureFileStorage",
+    "sink_type": "AzureBlobFS",
+    "status": "Succeeded",
+    "files_read": 1,
+    "files_written": 1,
+    "data_consistency_verification": "Verified",
+    "report_lineage_to_purview_status": "Succeeded"
+  },
+  "catalog_verification": {
+    "api": "POST /datamap/api/search/query and GET /datamap/api/atlas/v2/lineage/{guid}",
+    "api_version": "2023-09-01",
+    "staged_adls_asset_found": true,
+    "staged_asset_type": "azure_datalake_gen2_resource_set",
+    "input_lineage_depth": 5,
+    "input_lineage_relation_count": 0,
+    "azure_files_source_present": false,
+    "adf_copy_activity_present": false,
+    "staged_artifact_resolves_to_landing_source": false
+  },
+  "acceptance": {
+    "live_purview_source_to_sink_relation_met": false,
+    "revised_task_3_4_complete": true,
+    "reason": "The live Copy activity reported a successful private Purview lineage push and cataloged the staged asset, satisfying the supplementary catalog-context portion of revised task 3.4. The catalog still exposed no Azure Files source, ADF Copy process, or source-to-sink relation after three days. Authoritative landing-to-staged resolution is therefore supplied by the repository staging record verified under tasks 3.2 and 3.3, not by a Purview backtrace."
+  },
+  "cleanup": {
+    "data_factory_restored_to_user_assigned_identities": true,
+    "data_factory_purview_configuration_removed": true,
+    "purview_managed_private_endpoints_remaining": 0,
+    "purview_accounts_remaining": 0,
+    "purview_private_endpoints_remaining": 0,
+    "purview_private_dns_zones_remaining": 0,
+    "purview_managed_resource_group_removed": true,
+    "verification_vm_state": "deallocated"
+  },
+  "claim_boundary": "This evidence covers coarse Microsoft Purview catalog lineage only. It does not claim record-level or variant-level Purview lineage."
+}

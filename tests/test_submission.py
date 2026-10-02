@@ -22,12 +22,15 @@ class SubmissionTests(unittest.TestCase):
         self.request = {"run_id": "SYN-RUN-001", "workflow_id": "synthetic-workflow",
                         "workflow_version": "v1", "reference_build": "GRCh38",
                         "reference_version": "synthetic-v1",
+                        "reference_manifest_sha256": "b" * 64,
                         "references": copy.deepcopy(self.references)}
         self.compatibility = {"schema_version": 1, "workflows": [{
             "workflow_id": "synthetic-workflow", "workflow_version": "v1",
+            "reference_manifest_sha256": "b" * 64,
             "reference_sets": [copy.deepcopy(self.references)],
         }]}
-        self.inventory = {"schema_version": 1, "references": [
+        self.inventory = {"schema_version": 1, "reference_manifest_sha256": "b" * 64,
+                          "references": [
             dict(reference, uri=f"file:///synthetic/{reference['name']}/v1/reference", sha256="a" * 64)
             for reference in self.references
         ]}
@@ -47,7 +50,8 @@ class SubmissionTests(unittest.TestCase):
         validated = self.allocate.call_args.args[0]
         self.assertEqual(validated["run_id"], "SYN-RUN-001")
         self.assertEqual(validated["compatibility_manifest_sha256"], digest(self.compatibility))
-        self.assertEqual(validated["reference_manifest_sha256"], digest(self.inventory))
+        self.assertEqual(validated["reference_manifest_sha256"], "b" * 64)
+        self.assertEqual(validated["reference_inventory_sha256"], digest(self.inventory))
         self.assertEqual({reference["name"] for reference in validated["references"]},
                          {"GRCh38", "synthetic-genes"})
         validated["references"][0]["version"] = "mutated"
@@ -77,15 +81,27 @@ class SubmissionTests(unittest.TestCase):
                 self.assert_rejected("reference set")
 
     def test_missing_explicit_build_identity_is_rejected(self):
-        for field in ("reference_build", "reference_version"):
+        for field in ("reference_build", "reference_version", "reference_manifest_sha256"):
             with self.subTest(field=field):
                 self.request.pop(field)
                 self.assert_rejected("exactly")
-                self.request[field] = "GRCh38" if field == "reference_build" else "synthetic-v1"
+                self.request[field] = {
+                    "reference_build": "GRCh38",
+                    "reference_version": "synthetic-v1",
+                    "reference_manifest_sha256": "b" * 64,
+                }[field]
 
     def test_mismatched_explicit_build_identity_never_allocates(self):
         self.request["reference_build"] = "hg19"
         self.assert_rejected("reference_build/reference_version")
+
+    def test_mismatched_manifest_digest_never_allocates(self):
+        self.request["reference_manifest_sha256"] = "c" * 64
+        self.assert_rejected("Incompatible reference manifest digest")
+
+    def test_unavailable_manifest_digest_never_allocates(self):
+        self.inventory["reference_manifest_sha256"] = "c" * 64
+        self.assert_rejected("Published reference manifest digest")
 
     def test_missing_extra_or_duplicate_annotation_is_rejected(self):
         for references in ([self.references[0]], self.references + [self.references[1]],

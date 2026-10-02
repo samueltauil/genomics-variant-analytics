@@ -24,6 +24,9 @@ from scripts.secondary_pipeline import (
     run_pipeline,
     run_quality_control,
     run_variant_calling,
+    synthetic_reference_identity,
+    synthetic_reference_manifest,
+    validate_synthetic_reference_bundle,
 )
 
 
@@ -41,10 +44,33 @@ class SecondaryPipelineTestCase(unittest.TestCase):
         self.assertEqual(sample_a["reference_version"], sample_b["reference_version"])
         self.assertTrue(sample_a["reference_version"].startswith("synthetic-"))
         self.assertEqual(sample_a["reference_build"], "SYN-demo-genome")
+        self.assertEqual(
+            sample_a["reference_manifest_sha256"],
+            synthetic_reference_identity()["reference_manifest_sha256"],
+        )
+        artifact = synthetic_reference_manifest()["artifacts"][0]
+        self.assertEqual(sample_a["reference_sha256"], artifact["sha256"])
+        self.assertEqual(Path(sample_a["reference_fasta"]).stat().st_size, artifact["size_bytes"])
         self.assertEqual(len(sample_a["truth_variants"]), 2)
         reads_r1 = Path(sample_a["reads_r1"]).read_text(encoding="utf-8")
         self.assertNotIn("patient", reads_r1.lower())
         self.assertIn(sample_a["sample_id"], reads_r1)
+
+    def test_staged_bundle_must_match_exact_reference_identity_and_content(self):
+        sample = generate_demo_sample(self.tmp / "sample")
+        manifest = {
+            "reference_build": sample["reference_build"],
+            "reference_version": sample["reference_version"],
+            "reference_manifest_sha256": sample["reference_manifest_sha256"],
+        }
+        (self.tmp / "sample" / "sample_manifest.json").write_text(
+            json.dumps(manifest), encoding="utf-8"
+        )
+        validate_synthetic_reference_bundle(self.tmp / "sample", **manifest)
+
+        Path(sample["reference_fasta"]).write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "content does not match"):
+            validate_synthetic_reference_bundle(self.tmp / "sample", **manifest)
 
     # -- quality control --------------------------------------------------
 

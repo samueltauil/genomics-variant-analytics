@@ -20,6 +20,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference-build", required=True)
     parser.add_argument("--reference-version", required=True)
+    parser.add_argument("--reference-manifest-sha256")
     parser.add_argument("--sample-id", default="SYN-SAMPLE-0001")
     parser.add_argument("--read-count", type=int, default=12)
     arguments = parser.parse_args()
@@ -42,11 +43,22 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    if (
+        arguments.reference_manifest_sha256 is not None
+        and sample["reference_manifest_sha256"] != arguments.reference_manifest_sha256
+    ):
+        print(
+            "Declared reference_manifest_sha256 does not match the generated demo "
+            "reference manifest; no fallback permitted.",
+            file=sys.stderr,
+        )
+        return 1
 
     manifest = {
         "sample_id": sample["sample_id"],
         "reference_build": sample["reference_build"],
         "reference_version": sample["reference_version"],
+        "reference_manifest_sha256": sample["reference_manifest_sha256"],
         "reference_sha256": sample["reference_sha256"],
         "contig": sample["contig"],
         "contig_length": sample["contig_length"],

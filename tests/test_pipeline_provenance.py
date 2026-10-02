@@ -27,6 +27,7 @@ def _base_record(**overrides):
         "workflow_version": "v0.1.0",
         "reference_build": "SYN-demo-genome",
         "reference_version": "synthetic-abc123def456",
+        "reference_manifest_sha256": "a" * 64,
         "execution_target": "local",
         "compute_pool": "local-dev",
         "input_uris": ["file:///tmp/a/reads_R1.fastq"],
@@ -42,14 +43,11 @@ def _base_record(**overrides):
 
 
 class ProvenanceFieldsTestCase(unittest.TestCase):
-    def test_provenance_fields_enumerates_twelve_content_fields(self):
-        # The secondary-analysis spec text names workflow id/version,
-        # reference build/version, execution target/pool, input/output
-        # URIs, start/end time, terminal state, and log location -- twelve
-        # distinct content fields (plus run_id as the record key, and
-        # failing_stage as the failure-only discriminator). This constant
-        # is the single source of truth for "all fields present" checks.
-        self.assertEqual(len(PROVENANCE_FIELDS), 12)
+    def test_provenance_fields_enumerates_thirteen_content_fields(self):
+        # The spec names twelve content fields. The immutable reference
+        # manifest digest required by the reference-data contract is retained
+        # alongside them; run_id and failing_stage remain record metadata.
+        self.assertEqual(len(PROVENANCE_FIELDS), 13)
 
     def test_all_provenance_fields_present_on_success(self):
         record = validate_run_record(_base_record())
@@ -115,6 +113,10 @@ class ValidateRunRecordTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_run_record(_base_record(input_uris=[]))
 
+    def test_rejects_invalid_reference_manifest_digest(self):
+        with self.assertRaises(ValueError):
+            validate_run_record(_base_record(reference_manifest_sha256="not-a-digest"))
+
 
 class RecordRunPersistenceTestCase(unittest.TestCase):
     def setUp(self):
@@ -147,6 +149,36 @@ class RecordRunPersistenceTestCase(unittest.TestCase):
     def test_get_run_returns_none_for_unknown_run_id(self):
         ensure_schema(self.connection)
         self.assertIsNone(get_run(self.connection, "SYN-RUN-MISSING"))
+
+    def test_existing_schema_is_extended_for_reference_manifest_digest(self):
+        self.connection.execute("DROP TABLE IF EXISTS pipeline_runs")
+        self.connection.execute(
+            """
+            CREATE TABLE pipeline_runs (
+                run_id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                workflow_version TEXT NOT NULL,
+                reference_build TEXT NOT NULL,
+                reference_version TEXT NOT NULL,
+                execution_target TEXT NOT NULL,
+                compute_pool TEXT NOT NULL,
+                input_uris TEXT NOT NULL,
+                output_uris TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                terminal_state TEXT NOT NULL,
+                log_location TEXT NOT NULL,
+                failing_stage TEXT
+            )
+            """
+        )
+
+        ensure_schema(self.connection)
+
+        columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(pipeline_runs)")
+        }
+        self.assertIn("reference_manifest_sha256", columns)
 
 
 if __name__ == "__main__":

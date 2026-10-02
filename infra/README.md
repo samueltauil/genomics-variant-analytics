@@ -1,13 +1,126 @@
 # Local Infrastructure Preparation
 
-Status: candidate inventory and local validator implemented. **No Bicep templates
-have been generated and nothing is deployable.** The inventory is not an approved
-infrastructure plan or evidence of Azure resource compatibility.
+## HPC campaign implementation
 
-Azure operations are paused at the user's request. Do not authenticate to Azure,
-enumerate subscriptions, provision resources, upload artifacts, seed cloud data,
-run benchmarks, or execute teardown as part of this phase. Local validation does
-not authorize any of those operations. No cloud deployment workflow is installed.
+`infra/hpc-campaign.bicep` and `scripts/hpc_campaign.py` implement the revised
+single-campaign Slurm path. AMLFS is ephemeral POSIX scratch only; native HSM
+import/export is not configured. An explicitly selected accelerator staging
+identity uses AzCopy against an existing private HNS storage account, with
+shared-key access and public storage access disabled. The durable account,
+identity, and image must carry the expected accelerator ownership tags; only
+the ephemeral campaign resource group is deleted.
+
+The local-only validation action checks identifiers, ownership inputs, the
+explicit reference build/version/manifest digest, and workflow compatibility.
+It can generate a minimal synthetic bundle under a caller-supplied temporary
+directory. It does not contact Azure:
+
+```powershell
+python -m scripts.hpc_campaign `
+  --action validate `
+  --subscription-id "<subscription-id>" `
+  --location eastus2 `
+  --campaign-id synthetic-001 `
+  --campaign-owner SYN-OWNER-001 `
+  --admin-public-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISyntheticOnly" `
+  --slurm-image-id "/subscriptions/<subscription-id>/resourceGroups/rg-images/providers/Microsoft.Compute/galleries/genomics/images/slurm-synthetic/versions/2026.9.28" `
+  --staging-identity-resource-id "/subscriptions/<subscription-id>/resourceGroups/rg-genomics-syn/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-genomics-staging" `
+  --staging-identity-client-id 11111111-1111-1111-1111-111111111111 `
+  --staging-identity-principal-id 22222222-2222-2222-2222-222222222222 `
+  --staging-storage-account-id "/subscriptions/<subscription-id>/resourceGroups/rg-genomics-syn/providers/Microsoft.Storage/storageAccounts/stglakesynthetic" `
+  --staging-storage-account-name stglakesynthetic `
+  --staging-environment synthetic `
+  --reference-build SYN-demo-genome `
+  --reference-version synthetic-1385e2e921c4 `
+  --reference-manifest-sha256 7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83
+```
+
+The `run` action is a live, billable operation and was not executed for this
+implementation. It requires a prebuilt private image containing Slurm, the
+Lustre client, AzCopy, Java and Nextflow, Python 3, samtools, standard Linux
+mount/checksum utilities (`mount.lustre`, `mountpoint`, `findmnt`, `sha256sum`,
+GNU `find`/`sort`/`xargs`, and passwordless `sudo`), and this repository at the
+declared path. It must also provide a configured single-node Slurm
+scheduler/worker and the requested partition. Docker is not required because
+the Slurm profile runs image-pinned host tools directly.
+The template has no marketplace-image fallback. On success or failure, the
+orchestrator enters guarded synchronous teardown from a `finally` path and
+deletes only a resource group whose ownership tags exactly match the
+invocation. Failure diagnostics must therefore be copied to durable Blob
+storage by the worker before teardown; if that copy also fails, only the
+orchestrator error remains.
+
+Status: parameterized Bicep exists for the accelerator foundation and the
+separate HPC campaign. The campaign path has local/static validation only in
+this change; it has not been deployed or accepted live.
+
+## Private Slurm image
+
+`infra/slurm-image-gallery.bicep`, `infra/slurm-image-builder.bicep`,
+`infra/scripts/configure-slurm-image.sh`, and
+`scripts/build_slurm_image.py` define the private image prerequisite for the
+campaign. The implementation builds a no-public-IP Ubuntu 24.04 Gen2 Trusted
+Launch VM in a disposable private build resource group, configures it through
+VM Run Command, verifies the pinned kernel and Secure Boot before capture,
+deprovisions and generalizes the VM, and captures it directly into Azure
+Compute Gallery. The image definition remains Ubuntu 24.04 Gen2 with
+`SecurityType=TrustedLaunchSupported`, which is the gallery feature that
+permits Trusted Launch VM deployments from the generalized image.
+
+The build pins the Canonical source version and running Azure kernel, installs
+the matching Microsoft prebuilt AMLFS kmod package rather than DKMS, verifies
+the Microsoft package-signing key fingerprint, and checksum-verifies the
+Nextflow and AzCopy release assets. It installs the required Slurm, AMLFS,
+AzCopy, Java, Nextflow, Python, samtools, mount/checksum, service, partition,
+and repository interfaces without Docker. The selected repository commit must
+be fetchable and must already contain the audited no-Docker Slurm profile,
+explicit Lustre work directory, durable URI options, and reference-manifest
+gate.
+
+The build and validation VMs have no public IP, and inbound Internet traffic is
+denied. The build subnet explicitly enables Azure default outbound access so
+the VM can retrieve Ubuntu and AMLFS packages, checksum-pinned release assets,
+and the declared repository commit. This is outbound public egress, not a
+no-egress private build; a deployment requiring all egress to stay private
+needs an approved package/artifact mirror and is outside this implementation.
+
+The orchestrator refuses an existing gallery image version and creates no build
+storage account, shared key, SAS, public IP, NAT gateway, Azure VM Image Builder
+template, AIB identity, or AIB staging resource group. It validates the retained
+version on a separate no-public-IP Trusted Launch VM with Secure Boot and vTPM
+enabled. Validation checks the Microsoft-signed Lustre module, `mount.lustre`,
+required tools and services, Slurm partition, repository commit/interface, and
+unchanged VM security profile. Build and validation resources are synchronously
+removed after success or failure. An image version is retained only after full
+validation; an owned unvalidated version is deleted, and cleanup failures are
+reported rather than suppressed.
+
+Slurm CPU capacity is set from the VM's runtime CPU count, and the requested
+partition must report `up` with at least one node before the image is accepted.
+The MUNGE key is generated on first boot rather than captured in the gallery
+image, so separate campaign VMs do not share a baked-in cluster key.
+
+Recovery validation on September 28, 2026 compiled both image Bicep templates,
+passed the focused Python tests and static configuration validation, and
+confirmed the pinned source is Gen2 and `TrustedLaunchSupported`. On September
+29, 2026 the Image Builder path was replaced before live acceptance because AIB
+creates an internal staging storage account and writes VHDs with shared-key
+access, which the subscription policy rejects. The replacement Trusted Launch
+VM capture path is locally tested and Bicep-compiled, but no live capture has
+yet been validated and no validated gallery image exists yet.
+
+Azure operations require explicit task-level authorization. The September 28
+image recovery included read-only source/quota checks and one bounded live
+entry-point invocation; the immutable-source gate stopped it before resource
+creation. Local validation by itself does not authorize provisioning, uploads,
+benchmarks, campaigns, or teardown.
+
+Continuation check (October 2, 2026): the focused image/campaign tests and both
+image Bicep compilations pass after local hardening. Current read-only Azure
+provider/quota checks failed because the cached Azure login grant was revoked;
+no live image build or resource creation was attempted, and current Azure
+resource state could not be re-verified. The gallery image remains
+unvalidated, so OpenSpec task 5.3 stays unchecked.
 
 ## Run Locally
 

@@ -108,18 +108,34 @@ must budget for duplicate storage and update lineage accordingly.
 **Classification:** Demo-specific.
 
 **Limitation:** The HPC execution path is not a permanently available file
-system. Scratch must be created, hydrated, exported, and removed for each
-campaign, and an interrupted export or teardown can require operator recovery.
+system. Scratch must be created, mounted, populated, drained, and removed for
+each campaign. The orchestrator tears down owned campaign resources after both
+success and failure, so AMLFS scratch is not retained for post-failure recovery.
 
-**Cause:** The design uses Azure Managed Lustre with Blob HSM integration as
-ephemeral high-performance scratch so idle HPC storage does not remain
-provisioned.
+**Cause:** The design uses Azure Managed Lustre only as ephemeral
+high-performance POSIX scratch. Native HSM import/export is not used because
+the accelerator keeps shared-key access disabled.
 
-**Workaround or mitigation:** Automate import, export, and teardown as workflow
-stages; retain run state and logs outside the scratch file system; and require
-an operator to inspect and retry a failed export before teardown. Customers
-that keep persistent scratch can reduce orchestration at the cost of ongoing
-capacity charges.
+**Workaround or mitigation:** `scripts/hpc_campaign.py` stages from and copies
+back to private Blob storage with managed-identity AzCopy, verifies input and
+output SHA-256 manifests, retains logs and provenance outside scratch, and
+deletes only a resource group carrying the exact campaign ownership tags.
+The worker attempts to copy failure diagnostics to durable Blob storage before
+the orchestrator's guarded `finally` teardown. If that diagnostic copy fails,
+operators have only the orchestrator error and must rerun after correcting the
+cause.
+Customers that keep persistent scratch can reduce orchestration at the cost of
+ongoing capacity charges.
+
+The private image prerequisite is implemented but not live-validated. The
+builder uses a private no-public-IP Trusted Launch VM capture path, a Microsoft
+prebuilt signed AMLFS kmod, and a retained-image validation VM with Secure Boot
+and vTPM enabled. It does not mutate VM security profiles after provisioning.
+Azure VM Image Builder is not used: a September 29, 2026 live attempt showed
+that AIB's internal staging storage account requires shared-key VHD access,
+which conflicts with the tenant policy requiring `allowSharedKeyAccess:false`.
+Until the Trusted Launch VM capture path passes a bounded live run, no
+validated gallery image is available for a live campaign.
 
 ## Catalog, lineage, and reproducibility constraints
 
@@ -452,7 +468,7 @@ limitation or mitigation above.
 | 5. Purview lacks Fabric sub-item lineage | Purview does not provide variant-record lineage for Fabric lakehouses |
 | 6. Healthcare data solutions uses a genomics layout and recommends BYOS | Large genomic files remain in object storage |
 | 7. Healthcare data solutions is changing delivery model | The healthcare data solutions delivery model is changing |
-| 8. Managed Lustre imports and exports through Blob HSM | Managed Lustre scratch requires lifecycle orchestration |
+| 8. Managed Lustre staging through managed-identity Blob copy | Managed Lustre scratch requires lifecycle orchestration |
 | 9. Illumina Platinum Genomes supplies authorized demo variants | The demo combines an authorized public genome with synthetic context |
 | 10. Immutable releases permanently bind tags, commits, and assets | Immutable releases cannot be corrected in place |
 | 11. Artifact and SBOM attestations can be published to ACR | A container digest does not prove how an image was built |

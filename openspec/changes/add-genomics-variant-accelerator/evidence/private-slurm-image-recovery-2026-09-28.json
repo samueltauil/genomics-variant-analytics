@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-09-28T01:40:24.8048650Z",
+  "scope": "private-slurm-image-recovery",
+  "result": "implementation-validated-live-build-blocked-before-resource-creation",
+  "source": {
+    "offer": "Canonical Ubuntu 24.04 LTS",
+    "version": "24.04.202609040",
+    "hyper_v_generation": "V2",
+    "security_type": "TrustedLaunchSupported",
+    "kernel": "6.17.0-1022-azure"
+  },
+  "image_contract": {
+    "distribution": "Azure Compute Gallery",
+    "definition_security_type": "TrustedLaunchSupported",
+    "amlfs_client": "2.17.0-24-gf517bc4",
+    "amlfs_install_method": "prebuilt-kmod",
+    "secure_boot_required": true,
+    "vtpm_required": true,
+    "docker_allowed": false,
+    "public_ip_allowed": false,
+    "shared_key_or_sas_allowed": false,
+    "genomic_payload_present": false
+  },
+  "local_validation": {
+    "focused_tests": 58,
+    "focused_tests_passed": true,
+    "python_compilation_passed": true,
+    "gallery_bicep_build_passed": true,
+    "builder_bicep_build_passed": true,
+    "campaign_bicep_build_passed": true,
+    "static_configuration_validation_passed": true,
+    "json_validation_passed": true
+  },
+  "live_gate": {
+    "authorized_context_available": true,
+    "read_only_source_check_passed": true,
+    "read_only_quota_check_passed": true,
+    "resource_creation_started": false,
+    "blocker": "The pinned immutable repository commit does not contain the audited no-Docker Slurm runtime interface; those changes remain only in the uncommitted working tree, and recovery was required not to create a commit."
+  },
+  "cleanup": {
+    "build_resource_group_exists": false,
+    "staging_resource_group_exists": false,
+    "validation_resource_group_exists": false,
+    "gallery_resource_group_exists": false,
+    "validated_gallery_image_exists": false
+  },
+  "task_5_3_complete": false
+}

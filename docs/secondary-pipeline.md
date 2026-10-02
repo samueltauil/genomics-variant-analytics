@@ -1,4 +1,4 @@
-# Secondary-analysis pipeline (local/containerized and Azure Batch)
+# Secondary-analysis pipeline (local/containerized, Azure Batch, and Slurm)
 
 This page documents the portable Nextflow secondary-analysis pipeline
 delivered for tasks 5.1, 5.2, 5.5, and 5.6 of the secondary-analysis
@@ -19,20 +19,21 @@ validation or compliance. See [claim-register.md](claim-register.md) and
   implements the same stage logic as a pure-Python, dependency-light core
   used both by the Nextflow `bin/` wrapper scripts and by a standalone CLI
   (`scripts/run_secondary_pipeline.py`) that needs no Nextflow installation.
-  Every run declares an explicit `reference_build` (`SYN-demo-genome`) and an
-  immutable `reference_version` derived from a SHA-256 digest of the
-  generated synthetic reference content; there is no default, inference from
-  contig names, or silent substitution -- `workflows/bin/generate_demo_sample.py`
-  fails closed if the declared build/version does not match the generated
-  content.
+  Every run declares `reference_build` (`SYN-demo-genome`), immutable
+  `reference_version` (`synthetic-1385e2e921c4`), and the canonical SHA-256 of
+  `workflows/synthetic-reference-manifest.json`; there is no default,
+  inference from contig names, or silent substitution. Both launchers reject a
+  missing or incompatible declaration before starting pipeline compute, and
+  the generator verifies the runtime FASTA against the metadata-only manifest.
 - **Task 5.5 -- persist run provenance.** `scripts/pipeline_provenance.py`
-  defines and validates twelve provenance content fields (workflow id and
-  version, reference build and version, execution target and compute pool,
-  input URIs, output URIs, start and end time, terminal state, and log
-  location), plus a `failing_stage` field that is required on failure and
+  defines and validates thirteen provenance content fields (workflow id and
+  version, reference build, version and manifest digest, execution target and
+  compute pool, input URIs, output URIs, start and end time, terminal state,
+  and log location), plus a `failing_stage` field that is required on failure and
   forbidden on success. The spec text says "verify all ten fields are
   present" but its own field list literally enumerates twelve distinct
-  values; this implementation records and validates all twelve rather than
+  values; this implementation records all twelve named spec values plus the
+  immutable manifest digest required by the reference-data contract rather than
   silently dropping two to match the word "ten" -- see
   [Known discrepancy](#known-discrepancy-in-the-spec-text) below.
 - **Task 5.6 -- stage-level failure handling.** Any of the three stages
@@ -43,10 +44,23 @@ validation or compliance. See [claim-register.md](claim-register.md) and
   at the pure-Python orchestrator level and via real `nextflow run`
   executions (see [Manual verification evidence](#manual-verification-evidence)).
 
-Tasks 5.3-5.4 and 5.7 (Slurm/Managed Lustre live execution, Batch-vs-HPC
-concordance, and further cost/performance hardening) are out of this scope
-and are not claimed as complete here; task 5.2 (Azure Batch live execution)
-is now complete -- see
+Task 5.3 now has a locally and statically validated single-campaign
+orchestration path, but its required live create/use/copy-out/teardown
+acceptance remains incomplete. The private-image implementation now configures
+a private no-public-IP Trusted Launch Ubuntu 24.04 build VM, verifies its pinned
+kernel and Secure Boot state, deprovisions/generalizes it, captures it into a
+Gen2 `TrustedLaunchSupported` Compute Gallery definition, and validates the
+retained version on a separate Trusted Launch VM. It uses the Microsoft
+prebuilt signed AMLFS kmod package; it never installs DKMS, Docker, creates a
+build storage account, or changes a VM security profile after provisioning.
+Azure VM Image Builder was rejected on September 29, 2026 because its internal
+staging storage account requires shared-key VHD access, which is incompatible
+with the tenant policy requiring `allowSharedKeyAccess:false`. Focused tests
+and Bicep compilation pass, but the Trusted Launch VM capture path has not yet
+been live-validated. No validated gallery image exists. The earlier September
+27 DKMS attempt remains historical failed evidence and is not the current
+design. Task 5.4 (Batch-vs-HPC concordance) also remains outside this
+implementation. Task 5.2 (Azure Batch live execution) is complete -- see
 [Azure Batch profile -- validated with a live run](#azure-batch-profile----validated-with-a-live-run-task-52)
 below.
 
@@ -78,15 +92,26 @@ recorded as a environment-specific Nextflow limitation, not a design choice.
 
 ## Reference build and version
 
-Every run requires `--reference_build`/`--reference-build` and
-`--reference_version`/`--reference-version` (or generates and self-checks
-them via `generate_demo_sample()`); there is no default. The demo reference
-is a 120bp synthetic sequence (not a real genome) with two deliberately
-injected, documented SNP positions used only so the naive variant caller
-below has a known answer to check itself against. `reference_version` is
-`synthetic-<first 12 hex chars of the SHA-256 of the reference FASTA body>`,
-making it immutable and reproducible: any change to the synthetic reference
-content changes the version string.
+Every runnable submission requires `--reference_build`/`--reference-build`,
+`--reference_version`/`--reference-version`, and
+`--reference_manifest_sha256`/`--reference-manifest-sha256`; there is no
+default. The demo reference is a 120bp synthetic sequence (not a real genome)
+with two deliberately injected SNP positions used only so the naive variant
+caller below has a known answer to check itself against.
+
+The exact identity is:
+
+- Build: `SYN-demo-genome`
+- Version: `synthetic-1385e2e921c4`
+- Canonical manifest SHA-256:
+  `7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83`
+- Runtime-generated `reference.fasta` SHA-256:
+  `51a195ba91b85581e581cc9d039f234df29dae83da01e44a6b0527780350c6da`
+
+`workflows/synthetic-reference-manifest.json` stores only this identity,
+generation provenance, checksum, and byte count. The FASTA is generated at
+runtime with normalized LF bytes and is never committed. Any content change
+changes the checksum and requires a new immutable version and manifest digest.
 
 ## Naive stub logic -- explicitly not validated bioinformatics
 
@@ -213,8 +238,8 @@ Succeeded   : 5
 
 It produced a real BAM (`SYN-SAMPLE-0001.bam`), its index (`.bam.bai`), a
 VCF (`SYN-SAMPLE-0001.vcf`), and `qc_report.json` (`passed: true`,
-12 synthetic reads per mate). Its provenance record validates against the
-same twelve-field schema used for the local/standard profile:
+12 synthetic reads per mate). Its provenance record includes the complete
+field set used by the local/standard profile at the time of that live run:
 
 ```json
 {
@@ -286,22 +311,114 @@ this run's provenance was recorded directly against
 Extending the launcher to drive the Azure Batch profile automatically is a
 follow-on hardening item, not a blocker for this task.
 
-## Slurm profile -- configuration preparation only
+## Slurm and ephemeral Managed Lustre campaign
 
-`workflows/conf/slurm.config` defines an executor profile for Slurm/HPC
-execution, per this task's original scope of "configuration preparation"
-rather than live execution:
+`scripts/hpc_campaign.py` is the single campaign entry point. Its `validate`
+action performs local-only input and compatibility validation and can generate
+a tiny synthetic bundle in a caller-selected temporary directory. Its `run`
+action is intentionally live and must be invoked only with explicit Azure
+authorization and budget approval.
 
-- The profile is credential-free, referencing a partition/queue by name/
-  environment variable only.
-- A live verification attempt on September 21, 2026 was blocked: `sbatch` was
-  unavailable on the execution host, and the authorized
-  `rg-genomics-20260919` resource group had no Slurm/CycleCloud cluster and no
-  Azure Managed Lustre filesystem. It contained Azure Batch, storage,
-  networking, and verification-VM resources only.
-- Therefore, the profile was not exercised against a live Slurm/Managed Lustre
-  campaign. Task 5.3 remains open until an authorized Slurm cluster, Lustre
-  capacity/network path, and campaign access are available.
+The path implements these fail-closed boundaries:
+
+- It requires the campaign id and owner, subscription, region, SSH public key,
+  an explicit private Slurm image id, and the exact reference build, immutable
+  version, and manifest SHA-256. Compatibility is checked before any Azure
+  command that creates a resource.
+- `infra/hpc-campaign.bicep` creates only ephemeral campaign resources:
+  private VNet/subnets and DNS, private Blob/DFS endpoints to an explicitly
+  selected accelerator storage account, a scheduler VM, and AMLFS scratch.
+  AMLFS has no HSM settings. The separately owned private HNS storage account
+  and staging identity survive campaign teardown so copied results, logs, and
+  provenance remain available.
+- The selected image must already contain a configured single-node Slurm
+  scheduler/worker with an available partition, the matching AMLFS Lustre
+  client and `mount.lustre`, AzCopy, Java and Nextflow, Python 3, samtools,
+  `sudo`, `mountpoint`, `findmnt`, `sha256sum`, GNU `find`/`sort`/`xargs`, and
+  this repository at the declared POSIX path. The VM identity must be able to
+  read and write the declared Blob locations; the Azure control-plane caller
+  must be allowed to invoke VM Run Command, and the image's admin user must
+  have passwordless `sudo` for the AMLFS mount. Docker is not required: the
+  Slurm profile sets `docker.enabled = false` and runs the image-pinned host
+  tools directly.
+  The Slurm profile runs those image-pinned host tools directly rather than
+  reaching ACR during the private campaign. This avoids public package or
+  container downloads after the campaign starts.
+- The VM mounts AMLFS, generates the minimal synthetic input at runtime,
+  uploads it to the private input container through AzCopy managed-identity
+  login, deletes the local seed, copies it back into the mounted POSIX path,
+  and verifies its SHA-256 manifest before invoking the existing Nextflow
+  Slurm profile.
+- Result files receive an `OUTPUT-SHA256SUMS` manifest, are copied to the
+  private output container with the same managed identity, downloaded to an
+  independent verification directory, and checked before success is emitted.
+  Nextflow logs, launcher output, terminal state, and the SQLite provenance
+  record are copied to the private log container.
+- The launcher records durable Blob input, output, and log URIs in Slurm run
+  provenance rather than ephemeral `/mnt/amlfs` paths. Local executions retain
+  their existing `file://` provenance.
+- Success, worker failure, and unverified copy-out all enter synchronous
+  teardown from the orchestrator's `finally` path, but deletion proceeds only
+  after the resource group's project, component, campaign-id, and owner tags
+  all match the invocation. The worker attempts to copy failure logs to the
+  durable log prefix before returning failure; campaign scratch is not retained
+  for diagnosis.
+- `workflows/conf/slurm.config` refuses to start without an explicit
+  `SLURM_LUSTRE_WORKDIR`, preventing accidental use of node-local scratch.
+
+Example local/static validation (the values are non-live examples):
+
+```powershell
+python -m scripts.hpc_campaign `
+  --action validate `
+  --subscription-id "<subscription-id>" `
+  --location eastus2 `
+  --campaign-id synthetic-001 `
+  --campaign-owner SYN-OWNER-001 `
+  --admin-public-key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISyntheticOnly" `
+  --slurm-image-id "/subscriptions/<subscription-id>/resourceGroups/rg-images/providers/Microsoft.Compute/galleries/genomics/images/slurm-synthetic/versions/2026.9.28" `
+  --staging-identity-resource-id "/subscriptions/<subscription-id>/resourceGroups/rg-genomics-syn/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-genomics-staging" `
+  --staging-identity-client-id 11111111-1111-1111-1111-111111111111 `
+  --staging-identity-principal-id 22222222-2222-2222-2222-222222222222 `
+  --staging-storage-account-id "/subscriptions/<subscription-id>/resourceGroups/rg-genomics-syn/providers/Microsoft.Storage/storageAccounts/stglakesynthetic" `
+  --staging-storage-account-name stglakesynthetic `
+  --staging-environment synthetic `
+  --reference-build SYN-demo-genome `
+  --reference-version synthetic-1385e2e921c4 `
+  --reference-manifest-sha256 7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83
+```
+
+The earlier September 24, 2026 campaign remains only evidence that a private
+VM could run Slurm and mount AMLFS. It did not exercise this revised
+managed-identity copy path. Task 5.3 therefore remains pending until a bounded
+live campaign proves creation, stage-in, workflow use, verified copy-out, and
+guarded teardown together.
+
+The revised September 27, 2026 attempt did not create campaign resources. It
+proved the exact reference build/version/digest gate locally, confirmed live
+AMLFS quota and VM SKU availability, and compiled the Microsoft AMLFS 2.17
+DKMS client on a private Trusted Launch builder. Azure then held that builder
+in `ProvisioningState/updating` after Secure Boot was disabled for the DKMS
+module. Because a trustworthy private image could not be captured, the
+orchestrator's image preflight was not bypassed. The tagged builder group was
+deleted, and read-only checks found no campaign or image-builder resources.
+See the redacted
+[`slurm-lustre-revised-live-2026-09-27.json`](../openspec/changes/add-genomics-variant-accelerator/evidence/slurm-lustre-revised-live-2026-09-27.json)
+record.
+
+The September 28 recovery supersedes that image-build design without rewriting
+the historical result. The current builder installs the matching prebuilt
+Microsoft-signed kmod, keeps Secure Boot and vTPM enabled on the separate
+Trusted Launch validation VM, and rejects Docker or a repository commit that
+lacks the explicit Lustre work directory, durable URI arguments, reference
+manifest gate, and host-tool Slurm profile. It also refuses an existing image
+version and reports cleanup failures. The live action was intentionally
+stopped by that immutable-source gate because the required repository changes
+are still in the uncommitted working tree. Read-only post-checks found no
+recovery build, staging, validation, or gallery resource group. See the
+redacted
+[`private-slurm-image-recovery-2026-09-28.json`](../openspec/changes/add-genomics-variant-accelerator/evidence/private-slurm-image-recovery-2026-09-28.json)
+record.
 
 ## Manual verification evidence
 

@@ -40,6 +40,9 @@ local.settings.json
 # Deployed environment identifiers. Subscription and tenant ids never enter this repository.
 /.azure/*.env.json
 /.azure/*.local.*
+/.azure/*.parameters.json
+/.azure/*.secrets.json
+/.azure/private-slurm-image-local.json
 /.azure/what-if.*.json
 
 # Build and tooling

@@ -20,20 +20,37 @@ if __package__ in {None, ""}:
 
 try:
     from scripts.pipeline_provenance import record_run
-    from scripts.secondary_pipeline import generate_demo_sample, run_pipeline
+    from scripts.secondary_pipeline import (
+        generate_demo_sample,
+        run_pipeline,
+        validate_synthetic_reference_submission,
+    )
 except ModuleNotFoundError:
     from pipeline_provenance import record_run
-    from secondary_pipeline import generate_demo_sample, run_pipeline
+    from secondary_pipeline import (
+        generate_demo_sample,
+        run_pipeline,
+        validate_synthetic_reference_submission,
+    )
 
 
 WORKFLOW_ID = "genomics-secondary-analysis"
-WORKFLOW_VERSION = "v0.1.0"
+WORKFLOW_VERSION = "v0.2.0"
 
 
 def execute(*, run_id: str, work_dir: Path, publish_dir: Path, provenance_db: Path,
+            reference_build: str, reference_version: str,
+            reference_manifest_sha256: str,
             execution_target: str = "local", compute_pool: str = "local-dev",
             aligned_format: str = "bam", variant_format: str = "vcf",
             force_fail_stage: str | None = None, sample_seed_dir: Path | None = None) -> dict:
+    validate_synthetic_reference_submission(
+        WORKFLOW_ID,
+        WORKFLOW_VERSION,
+        reference_build,
+        reference_version,
+        reference_manifest_sha256,
+    )
     sample_seed_dir = Path(sample_seed_dir) if sample_seed_dir else Path(work_dir) / "sample"
     sample = generate_demo_sample(sample_seed_dir)
 
@@ -49,6 +66,7 @@ def execute(*, run_id: str, work_dir: Path, publish_dir: Path, provenance_db: Pa
         "workflow_version": WORKFLOW_VERSION,
         "reference_build": sample["reference_build"],
         "reference_version": sample["reference_version"],
+        "reference_manifest_sha256": sample["reference_manifest_sha256"],
         "execution_target": execution_target,
         "compute_pool": compute_pool,
         "input_uris": result.input_uris,
@@ -74,6 +92,7 @@ def execute(*, run_id: str, work_dir: Path, publish_dir: Path, provenance_db: Pa
         "provenance": persisted,
         "reference_build": sample["reference_build"],
         "reference_version": sample["reference_version"],
+        "reference_manifest_sha256": sample["reference_manifest_sha256"],
         "truth_variants": sample["truth_variants"],
         "variant_calls": result.stage_reports.get("variant_calling", {}).get("calls"),
     }
@@ -85,6 +104,9 @@ def main(argv=None) -> int:
     parser.add_argument("--work-dir", type=Path, required=True)
     parser.add_argument("--publish-dir", type=Path, required=True)
     parser.add_argument("--provenance-db", type=Path, required=True)
+    parser.add_argument("--reference-build", required=True)
+    parser.add_argument("--reference-version", required=True)
+    parser.add_argument("--reference-manifest-sha256", required=True)
     parser.add_argument("--execution-target", default="local")
     parser.add_argument("--compute-pool", default="local-dev")
     parser.add_argument("--aligned-format", choices=("bam", "cram"), default="bam")
@@ -96,6 +118,9 @@ def main(argv=None) -> int:
         report = execute(
             run_id=arguments.run_id, work_dir=arguments.work_dir,
             publish_dir=arguments.publish_dir, provenance_db=arguments.provenance_db,
+            reference_build=arguments.reference_build,
+            reference_version=arguments.reference_version,
+            reference_manifest_sha256=arguments.reference_manifest_sha256,
             execution_target=arguments.execution_target, compute_pool=arguments.compute_pool,
             aligned_format=arguments.aligned_format, variant_format=arguments.variant_format,
             force_fail_stage=arguments.force_fail_stage,

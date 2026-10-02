@@ -20,5 +20,5 @@ jobs:
       - name: Validate presenter positioning and assumptions
         run: >-
           python3 scripts/review_positioning.py
-          --review-date 2026-09-19
+          --review-date 2026-10-02
           --check-report docs/positioning-review.json

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "type": "genome",
+  "name": "SYN-demo-genome",
+  "version": "synthetic-1385e2e921c4",
+  "published_at": "2026-09-19T00:00:00Z",
+  "artifacts": [
+    {
+      "filename": "reference.fasta",
+      "sha256": "51a195ba91b85581e581cc9d039f234df29dae83da01e44a6b0527780350c6da",
+      "size_bytes": 176,
+      "source": "generated://scripts.secondary_pipeline/seed-20260919"
+    }
+  ]
+}

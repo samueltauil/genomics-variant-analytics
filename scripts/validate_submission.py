@@ -25,6 +25,13 @@ def text(value, label):
     return value
 
 
+def sha256(value, label):
+    value = text(value, label)
+    if not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError(f"{label} must be 64 lowercase hexadecimal characters.")
+    return value
+
+
 def reference_key(reference, artifact=False):
     expected = {"type", "name", "version"}
     fields(reference, expected | ({"uri", "sha256"} if artifact else set()), "Reference")
@@ -37,8 +44,7 @@ def reference_key(reference, artifact=False):
                 or uri.query or uri.fragment or (uri.scheme != "file" and not uri.netloc)
                 or uri.password or (uri.scheme == "https" and uri.username)):
             raise ValueError("Reference URI must be a credential-free file, HTTPS or ABFSS location.")
-        if not re.fullmatch(r"[0-9a-f]{64}", text(reference["sha256"], "sha256")):
-            raise ValueError("Reference sha256 must be 64 lowercase hexadecimal characters.")
+        sha256(reference["sha256"], "Reference sha256")
     return key
 
 
@@ -53,8 +59,8 @@ def reference_set(references):
     return frozenset(keys)
 
 
-def document(value, collection):
-    fields(value, {"schema_version", collection}, collection)
+def document(value, collection, extra_fields=frozenset()):
+    fields(value, {"schema_version", collection, *extra_fields}, collection)
     if type(value["schema_version"]) is not int or value["schema_version"] != 1:
         raise ValueError("Unsupported manifest schema_version; expected 1.")
     if not isinstance(value[collection], list) or not value[collection]:
@@ -71,28 +77,44 @@ def validate_request_compatibility(request, compatibility):
     fields(
         request,
         {"run_id", "workflow_id", "workflow_version", "reference_build",
-         "reference_version", "references"},
+         "reference_version", "reference_manifest_sha256", "references"},
         "Submission",
     )
     for field in ("run_id", "workflow_id", "workflow_version", "reference_build",
                   "reference_version"):
         text(request[field], field)
+    sha256(request["reference_manifest_sha256"], "reference_manifest_sha256")
     requested = reference_set(request["references"])
     genome = next(reference for reference in request["references"] if reference["type"] == "genome")
     workflows = {}
     for workflow in document(compatibility, "workflows"):
-        fields(workflow, {"workflow_id", "workflow_version", "reference_sets"}, "Workflow")
+        fields(
+            workflow,
+            {"workflow_id", "workflow_version", "reference_manifest_sha256", "reference_sets"},
+            "Workflow",
+        )
         key = (text(workflow["workflow_id"], "workflow_id"), text(workflow["workflow_version"], "workflow_version"))
         if key in workflows:
             raise ValueError("Duplicate workflow version in compatibility manifest.")
         if not isinstance(workflow["reference_sets"], list) or not workflow["reference_sets"]:
             raise ValueError("Workflow must declare at least one compatible reference set.")
-        workflows[key] = [reference_set(references) for references in workflow["reference_sets"]]
+        workflows[key] = {
+            "reference_sets": [
+                reference_set(references) for references in workflow["reference_sets"]
+            ],
+            "reference_manifest_sha256": sha256(
+                workflow["reference_manifest_sha256"], "reference_manifest_sha256"
+            ),
+        }
     workflow_key = (request["workflow_id"], request["workflow_version"])
     if workflow_key not in workflows:
         raise ValueError(f"Undeclared workflow version: {workflow_key}.")
-    if requested not in workflows[workflow_key]:
+    if requested not in workflows[workflow_key]["reference_sets"]:
         raise ValueError(f"Incompatible reference set for workflow {workflow_key}: {sorted(requested)}.")
+    if request["reference_manifest_sha256"] != workflows[workflow_key]["reference_manifest_sha256"]:
+        raise ValueError(
+            f"Incompatible reference manifest digest for workflow {workflow_key}."
+        )
     if (request["reference_build"], request["reference_version"]) != (
         genome["name"], genome["version"]
     ):
@@ -105,7 +127,15 @@ def validate_request_compatibility(request, compatibility):
 def validate_submission(request, compatibility, inventory):
     requested = validate_request_compatibility(request, compatibility)
     available = {}
-    for reference in document(inventory, "references"):
+    references = document(
+        inventory, "references", extra_fields={"reference_manifest_sha256"}
+    )
+    inventory_manifest_sha256 = sha256(
+        inventory["reference_manifest_sha256"], "reference_manifest_sha256"
+    )
+    if inventory_manifest_sha256 != request["reference_manifest_sha256"]:
+        raise ValueError("Published reference manifest digest does not match the submission.")
+    for reference in references:
         key = reference_key(reference, artifact=True)
         if key in available:
             raise ValueError("Duplicate reference version in inventory.")
@@ -120,7 +150,8 @@ def validate_submission(request, compatibility, inventory):
         "workflow_version": request["workflow_version"],
         "references": [copy.deepcopy(available[key]) for key in sorted(requested)],
         "compatibility_manifest_sha256": digest(compatibility),
-        "reference_manifest_sha256": digest(inventory),
+        "reference_manifest_sha256": request["reference_manifest_sha256"],
+        "reference_inventory_sha256": digest(inventory),
     }
 
 

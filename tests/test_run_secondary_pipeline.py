@@ -16,15 +16,20 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 from scripts.pipeline_provenance import get_run
 from scripts.run_secondary_pipeline import execute
+from scripts.secondary_pipeline import synthetic_reference_identity
 
 
 class RunSecondaryPipelineExecuteTestCase(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="run-secondary-pipeline-test-"))
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        self.reference = synthetic_reference_identity()
+
+    def execute(self, **kwargs):
+        return execute(**self.reference, **kwargs)
 
     def test_execute_success_persists_full_provenance(self):
-        report = execute(
+        report = self.execute(
             run_id="SYN-RUN-EXEC-OK", work_dir=self.tmp / "work",
             publish_dir=self.tmp / "publish", provenance_db=self.tmp / "prov.sqlite3",
         )
@@ -39,7 +44,7 @@ class RunSecondaryPipelineExecuteTestCase(unittest.TestCase):
         self.assertTrue(len(stored["output_uris"]) >= 3)
 
     def test_execute_forced_failure_persists_failing_stage_and_no_outputs(self):
-        report = execute(
+        report = self.execute(
             run_id="SYN-RUN-EXEC-FAIL", work_dir=self.tmp / "work",
             publish_dir=self.tmp / "publish", provenance_db=self.tmp / "prov.sqlite3",
             force_fail_stage="variant_calling",
@@ -59,7 +64,11 @@ class RunSecondaryPipelineExecuteTestCase(unittest.TestCase):
              "--run-id", "SYN-RUN-CLI-OK",
              "--work-dir", str(self.tmp / "work"),
              "--publish-dir", str(self.tmp / "publish"),
-             "--provenance-db", str(self.tmp / "prov.sqlite3")],
+             "--provenance-db", str(self.tmp / "prov.sqlite3"),
+             "--reference-build", self.reference["reference_build"],
+             "--reference-version", self.reference["reference_version"],
+             "--reference-manifest-sha256",
+             self.reference["reference_manifest_sha256"]],
             cwd=REPOSITORY_ROOT, capture_output=True, text=True,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -73,6 +82,10 @@ class RunSecondaryPipelineExecuteTestCase(unittest.TestCase):
              "--work-dir", str(self.tmp / "work"),
              "--publish-dir", str(self.tmp / "publish"),
              "--provenance-db", str(self.tmp / "prov.sqlite3"),
+             "--reference-build", self.reference["reference_build"],
+             "--reference-version", self.reference["reference_version"],
+             "--reference-manifest-sha256",
+             self.reference["reference_manifest_sha256"],
              "--force-fail-stage", "alignment"],
             cwd=REPOSITORY_ROOT, capture_output=True, text=True,
         )
@@ -80,6 +93,19 @@ class RunSecondaryPipelineExecuteTestCase(unittest.TestCase):
         payload = json.loads(completed.stdout)
         self.assertEqual(payload["terminal_state"], "failed")
         self.assertEqual(payload["failing_stage"], "alignment")
+
+    def test_mismatched_reference_is_rejected_before_work_directory_creation(self):
+        with self.assertRaisesRegex(ValueError, "Incompatible"):
+            execute(
+                run_id="SYN-RUN-BAD-REFERENCE",
+                work_dir=self.tmp / "work",
+                publish_dir=self.tmp / "publish",
+                provenance_db=self.tmp / "prov.sqlite3",
+                reference_build="SYN-other-build",
+                reference_version=self.reference["reference_version"],
+                reference_manifest_sha256=self.reference["reference_manifest_sha256"],
+            )
+        self.assertFalse((self.tmp / "work").exists())
 
 
 if __name__ == "__main__":
