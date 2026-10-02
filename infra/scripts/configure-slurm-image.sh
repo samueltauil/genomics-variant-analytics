@@ -83,16 +83,17 @@ chmod -R go-w "$REPOSITORY_PATH"
 
 install -d -m 0755 /etc/slurm /etc/munge \
   /var/lib/slurm/slurmctld /var/lib/slurm/slurmd
-if [[ ! -s /etc/munge/munge.key ]]; then
-  dd if=/dev/urandom of=/etc/munge/munge.key bs=1 count=1024 status=none
-fi
-chown munge:munge /etc/munge/munge.key
-chmod 0400 /etc/munge/munge.key
 chown slurm:slurm /var/lib/slurm/slurmctld /var/lib/slurm/slurmd
 
 cat >/usr/local/sbin/configure-local-slurm <<EOF
 #!/usr/bin/env bash
 set -Eeuo pipefail
+if [[ ! -s /etc/munge/munge.key ]]; then
+  umask 077
+  dd if=/dev/urandom of=/etc/munge/munge.key bs=1 count=1024 status=none
+  chown munge:munge /etc/munge/munge.key
+  chmod 0400 /etc/munge/munge.key
+fi
 host="\$(hostname -s)"
 cat >/etc/slurm/slurm.conf <<CONF
 ClusterName=genomics-accelerator
@@ -110,7 +111,7 @@ TaskPlugin=task/affinity
 SchedulerType=sched/backfill
 SelectType=select/cons_tres
 SelectTypeParameters=CR_Core
-NodeName=\$host CPUs=1 State=UNKNOWN
+NodeName=\$host CPUs=\$(nproc) State=UNKNOWN
 PartitionName=$SLURM_PARTITION Nodes=\$host Default=YES MaxTime=INFINITE State=UP
 CONF
 EOF
@@ -136,6 +137,12 @@ Requires=genomics-slurm-config.service munge.service
 After=genomics-slurm-config.service munge.service
 EOF
 done
+install -d -m 0755 /etc/systemd/system/munge.service.d
+cat > /etc/systemd/system/munge.service.d/genomics.conf <<'EOF'
+[Unit]
+Requires=genomics-slurm-config.service
+After=genomics-slurm-config.service
+EOF
 
 cat >/etc/sudoers.d/azureuser-amlfs <<'EOF'
 azureuser ALL=(ALL) NOPASSWD: ALL

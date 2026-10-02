@@ -77,6 +77,13 @@ be fetchable and must already contain the audited no-Docker Slurm profile,
 explicit Lustre work directory, durable URI options, and reference-manifest
 gate.
 
+The build and validation VMs have no public IP, and inbound Internet traffic is
+denied. The build subnet explicitly enables Azure default outbound access so
+the VM can retrieve Ubuntu and AMLFS packages, checksum-pinned release assets,
+and the declared repository commit. This is outbound public egress, not a
+no-egress private build; a deployment requiring all egress to stay private
+needs an approved package/artifact mirror and is outside this implementation.
+
 The orchestrator refuses an existing gallery image version and creates no build
 storage account, shared key, SAS, public IP, NAT gateway, Azure VM Image Builder
 template, AIB identity, or AIB staging resource group. It validates the retained
@@ -87,6 +94,11 @@ unchanged VM security profile. Build and validation resources are synchronously
 removed after success or failure. An image version is retained only after full
 validation; an owned unvalidated version is deleted, and cleanup failures are
 reported rather than suppressed.
+
+Slurm CPU capacity is set from the VM's runtime CPU count, and the requested
+partition must report `up` with at least one node before the image is accepted.
+The MUNGE key is generated on first boot rather than captured in the gallery
+image, so separate campaign VMs do not share a baked-in cluster key.
 
 Recovery validation on September 28, 2026 compiled both image Bicep templates,
 passed the focused Python tests and static configuration validation, and
@@ -102,6 +114,13 @@ image recovery included read-only source/quota checks and one bounded live
 entry-point invocation; the immutable-source gate stopped it before resource
 creation. Local validation by itself does not authorize provisioning, uploads,
 benchmarks, campaigns, or teardown.
+
+Continuation check (October 2, 2026): the focused image/campaign tests and both
+image Bicep compilations pass after local hardening. Current read-only Azure
+provider/quota checks failed because the cached Azure login grant was revoked;
+no live image build or resource creation was attempted, and current Azure
+resource state could not be re-verified. The gallery image remains
+unvalidated, so OpenSpec task 5.3 stays unchecked.
 
 ## Run Locally
 

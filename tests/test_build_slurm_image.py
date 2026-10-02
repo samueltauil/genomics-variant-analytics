@@ -9,9 +9,60 @@ from scripts.build_slurm_image import (
     _image_version_count,
     _verify_repository_commit,
     _validation_script,
+    _run,
     run_build,
     validate_config,
 )
+
+
+class TransientRetryTests(unittest.TestCase):
+    @patch("scripts.build_slurm_image.time.sleep")
+    @patch("scripts.build_slurm_image.shutil.which", return_value="/usr/bin/az")
+    @patch("scripts.build_slurm_image.subprocess.run")
+    def test_retries_only_connection_failures(self, run, _which, sleep):
+        from subprocess import CompletedProcess
+
+        dns = CompletedProcess([], 1, "", "Failed to resolve 'management.azure.com'")
+        run.side_effect = [dns, CompletedProcess([], 0, "ok", "")]
+        self.assertEqual(_run(["az", "group", "list"], error="x"), "ok")
+        self.assertEqual(run.call_count, 2)
+        sleep.assert_called_once()
+
+        run.reset_mock()
+        run.side_effect = [CompletedProcess([], 1, "", "AuthorizationFailed")]
+        with self.assertRaisesRegex(RuntimeError, "AuthorizationFailed"):
+            _run(["az", "group", "list"], error="x")
+        self.assertEqual(run.call_count, 1)
+
+        run.reset_mock()
+        run.side_effect = [CompletedProcess([], 1, "", "Connection aborted")]
+        with self.assertRaisesRegex(RuntimeError, "Connection aborted"):
+            _run(["az", "sig", "image-version", "create"], error="x")
+        self.assertEqual(run.call_count, 1)
+
+        run.reset_mock()
+        run.side_effect = [dns, dns, dns]
+        with self.assertRaisesRegex(RuntimeError, "Failed to resolve"):
+            _run(["az", "group", "list"], error="x")
+        self.assertEqual(run.call_count, 3)
+
+    @patch("scripts.build_slurm_image.shutil.which", return_value="/usr/bin/az")
+    @patch("scripts.build_slurm_image.subprocess.run")
+    def test_multiline_scripts_are_passed_as_files(self, run, _which):
+        from subprocess import CompletedProcess
+
+        seen = {}
+
+        def capture(command, **_kwargs):
+            argument = command[command.index("--scripts") + 1]
+            seen["argument"] = argument
+            seen["body"] = Path(argument[1:]).read_text(encoding="utf-8")
+            return CompletedProcess([], 0, "{}", "")
+
+        run.side_effect = capture
+        _run(["az", "vm", "run-command", "invoke", "--scripts", "set -e\necho ok\n"], error="x")
+        self.assertTrue(seen["argument"].startswith("@"))
+        self.assertEqual(seen["body"], "set -e\necho ok\n")
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -112,6 +163,9 @@ class PrivateSlurmImageTests(unittest.TestCase):
             config(nextflow_sha256="not-a-digest"),
             config(repository_commit="main"),
             config(repository_path="relative/path"),
+            config(repository_path="/opt"),
+            config(repository_path="/opt/../etc"),
+            config(repository_path="/etc/genomics-variant-analytics"),
             config(repository_path="/opt/repository;touch-bad"),
             config(repository_url="ssh://git@example.invalid/repository"),
             config(nextflow_url="https://github.com/nextflow-io/nextflow?token=bad"),
@@ -143,6 +197,30 @@ class PrivateSlurmImageTests(unittest.TestCase):
         self.assertIn("modinfo -F signer lustre", configure)
         self.assertIn("BC528686B50D79E339D3721CEB3E94ADBE1229CF", configure)
         self.assertIn("PRIVATE_SLURM_IMAGE_CONFIGURE_SUCCEEDED", configure)
+        runtime_config = configure.split(
+            "cat >/usr/local/sbin/configure-local-slurm <<EOF\n", 1
+        )[1].split("\nEOF\n", 1)[0]
+        self.assertIn("if [[ ! -s /etc/munge/munge.key ]]", runtime_config)
+        self.assertIn(r"NodeName=\$host CPUs=\$(nproc)", runtime_config)
+        self.assertNotIn(
+            "dd if=/dev/urandom",
+            configure.split(
+                "cat >/usr/local/sbin/configure-local-slurm <<EOF", 1
+            )[0],
+        )
+        munge_dropin = configure.split(
+            "cat > /etc/systemd/system/munge.service.d/genomics.conf <<'EOF'\n",
+            1,
+        )[1].split("\nEOF\n", 1)[0]
+        self.assertEqual(
+            munge_dropin,
+            "[Unit]\nRequires=genomics-slurm-config.service\n"
+            "After=genomics-slurm-config.service",
+        )
+        self.assertIn(
+            "After=genomics-slurm-config.service munge.service",
+            configure,
+        )
         self.assertNotIn("secureBootEnabled: false", builder)
         self.assertNotIn("lustre-client-dkms", builder)
         self.assertNotIn("apt-get install -y lustre-client-dkms", configure)
@@ -165,6 +243,7 @@ class PrivateSlurmImageTests(unittest.TestCase):
             "sinfo -h -p",
             "sudo -n true",
             "/opt/genomics-variant-analytics",
+            "awk -F'|' '$1 == \"up\" && $2 > 0",
             "! command -v docker",
         ):
             self.assertIn(expected, script)
@@ -172,6 +251,8 @@ class PrivateSlurmImageTests(unittest.TestCase):
             ROOT / "infra" / "scripts" / "configure-slurm-image.sh"
         ).read_text()
         self.assertIn("azureuser ALL=(ALL) NOPASSWD: ALL", configure)
+        self.assertIn("for tool in mount.lustre", script)
+        self.assertIn("xargs awk;", script)
 
     @patch("scripts.build_slurm_image._az", return_value="0\n")
     def test_image_version_count_is_explicit_and_numeric(self, az):
@@ -321,7 +402,7 @@ class PrivateSlurmImageTests(unittest.TestCase):
             ("Build VM configuration failed", False),
             ("Build VM pre-capture verification failed", False),
             ("Build VM deprovision failed", False),
-            ("Gallery image version capture failed", False),
+            ("Gallery image version capture failed", True),
             ("Image interface validation failed", True),
         ):
             with self.subTest(failing_error=failing_error):

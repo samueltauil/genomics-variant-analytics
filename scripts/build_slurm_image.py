@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -142,8 +143,20 @@ def validate_config(config: ImageBuildConfig) -> dict[str, Any]:
             raise ValueError(f"{name} must be a lowercase SHA-256 digest.")
     if not COMMIT.fullmatch(config.repository_commit):
         raise ValueError("repository_commit must be a full Git commit SHA.")
-    if not re.fullmatch(r"/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+", config.repository_path):
-        raise ValueError("repository_path must be a safe absolute non-root POSIX path.")
+    if (
+        not re.fullmatch(
+            r"/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+",
+            config.repository_path,
+        )
+        or not config.repository_path.startswith("/opt/")
+        or any(
+            part in {"", ".", ".."}
+            for part in config.repository_path.split("/")[1:]
+        )
+    ):
+        raise ValueError(
+            "repository_path must be a safe absolute path below /opt without dot segments."
+        )
     if not re.fullmatch(r"[A-Za-z0-9._-]+", config.slurm_partition):
         raise ValueError("slurm_partition contains unsupported characters.")
     if not re.fullmatch(r"[A-Za-z0-9._-]+", config.nextflow_version):
@@ -180,32 +193,68 @@ def validate_config(config: ImageBuildConfig) -> dict[str, Any]:
     }
 
 
-def _run(arguments: list[str], *, error: str) -> str:
+TRANSIENT_CONNECTION_ERRORS = (
+    "Failed to resolve",
+    "getaddrinfo failed",
+    "timed out. (connect timeout",
+)
+
+
+def _materialize_scripts(arguments: list[str], directory: Path) -> list[str]:
+    """Pass multi-line run-command scripts as @file; cmd.exe truncates at newlines."""
+    result = list(arguments)
+    for index in range(1, len(result)):
+        value = result[index]
+        if result[index - 1] == "--scripts" and "\n" in value and not value.startswith("@"):
+            path = directory / f"run-command-{index}.sh"
+            path.write_text(value, encoding="utf-8", newline="\n")
+            result[index] = "@" + str(path)
+    return result
+
+
+def _run(arguments: list[str], *, error: str, attempts: int = 3) -> str:
+    with tempfile.TemporaryDirectory() as temporary:
+        return _run_materialized(
+            _materialize_scripts(arguments, Path(temporary)),
+            error=error,
+            attempts=attempts,
+        )
+
+
+def _run_materialized(arguments: list[str], *, error: str, attempts: int) -> str:
     executable = shutil.which(arguments[0])
     if executable is None:
         raise RuntimeError(f"{error}: executable not found: {arguments[0]}")
     command = [executable, *arguments[1:]]
-    if os.name == "nt" and Path(executable).suffix.lower() in {".cmd", ".bat"}:
-        completed = subprocess.run(
-            subprocess.list2cmdline(command),
-            capture_output=True,
-            text=True,
-            check=False,
-            shell=True,
-            stdin=subprocess.DEVNULL,
-        )
-    else:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            stdin=subprocess.DEVNULL,
-        )
-    if completed.returncode:
+    for attempt in range(1, attempts + 1):
+        if os.name == "nt" and Path(executable).suffix.lower() in {".cmd", ".bat"}:
+            completed = subprocess.run(
+                subprocess.list2cmdline(command),
+                capture_output=True,
+                text=True,
+                check=False,
+                shell=True,
+                stdin=subprocess.DEVNULL,
+            )
+        else:
+            completed = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                stdin=subprocess.DEVNULL,
+            )
+        if not completed.returncode:
+            return completed.stdout
         detail = (completed.stderr or completed.stdout).strip()
+        # Retry only client-side connection failures where the request never reached ARM.
+        if attempt < attempts and any(
+            marker in detail for marker in TRANSIENT_CONNECTION_ERRORS
+        ):
+            time.sleep(30 * attempt)
+            continue
         raise RuntimeError(f"{error}: {detail}")
-    return completed.stdout
+    raise AssertionError("unreachable")
 
 
 def _az(config: ImageBuildConfig, *arguments: str, error: str) -> str:
@@ -492,7 +541,7 @@ dpkg-query -W -f='${{Status}}\n' \
   "kmod-lustre-client-{config.source_kernel}-{config.amlfs_version}" \
   | grep -Fx 'install ok installed'
 sudo -n modprobe lustre
-for tool in mount.lustre azcopy java nextflow python3 samtools mount mountpoint findmnt sha256sum find sort xargs; do
+for tool in mount.lustre azcopy java nextflow python3 samtools mount mountpoint findmnt sha256sum find sort xargs awk; do
   command -v "$tool" >/dev/null
 done
 NXF_VER="{config.nextflow_version}" NXF_HOME=/opt/nextflow \
@@ -508,7 +557,8 @@ systemctl is-active --quiet walinuxagent
 systemctl is-active --quiet munge
 systemctl is-active --quiet slurmctld
 systemctl is-active --quiet slurmd
-sinfo -h -p "{config.slurm_partition}" -o '%P|%a|%D' | grep -F "{config.slurm_partition}"
+sinfo -h -p "{config.slurm_partition}" -o '%a|%D' \
+  | awk -F'|' '$1 == "up" && $2 > 0 {{ available = 1 }} END {{ exit !available }}'
 sudo -n true
 sudo -n mount --help >/dev/null
 sudo -n mkdir -p /mnt/amlfs
@@ -629,7 +679,7 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
     validate_config(config)
     _source_preflight(config)
     image_validated = False
-    image_version_created = False
+    image_version_create_attempted = False
     build_error: Exception | None = None
     result: dict[str, Any] | None = None
     evidence: dict[str, Any] = {
@@ -747,6 +797,7 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
             "--name", build_vm_name,
             "-o", "none", error="Build VM generalization failed",
         )
+        image_version_create_attempted = True
         _az(
             config, "sig", "image-version", "create",
             "--resource-group", config.gallery_resource_group,
@@ -761,7 +812,6 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
             "--tags", *_image_version_tags(config),
             "-o", "none", error="Gallery image version capture failed",
         )
-        image_version_created = True
 
         version = json.loads(_az(
             config, "sig", "image-version", "show",
@@ -859,7 +909,7 @@ def run_build(config: ImageBuildConfig) -> dict[str, Any]:
         build_error = error
     finally:
         cleanup_errors: list[str] = []
-        if not image_validated and image_version_created:
+        if not image_validated and image_version_create_attempted:
             try:
                 _delete_owned_image_version(config)
             except Exception as error:

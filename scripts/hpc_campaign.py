@@ -18,6 +18,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -207,6 +208,19 @@ def build_synthetic_bundle(directory: Path, config: CampaignConfig) -> dict[str,
 
 
 def _run(arguments: list[str], *, error: str) -> str:
+    with tempfile.TemporaryDirectory() as temporary:
+        arguments = list(arguments)
+        for index in range(1, len(arguments)):
+            value = arguments[index]
+            # cmd.exe truncates inline multi-line arguments; pass scripts as @file.
+            if arguments[index - 1] == "--scripts" and "\n" in value and not value.startswith("@"):
+                path = Path(temporary) / f"run-command-{index}.sh"
+                path.write_text(value, encoding="utf-8", newline="\n")
+                arguments[index] = "@" + str(path)
+        return _run_materialized(arguments, error=error)
+
+
+def _run_materialized(arguments: list[str], *, error: str) -> str:
     executable = shutil.which(arguments[0])
     if executable is None:
         raise RuntimeError(f"{error}: executable not found: {arguments[0]}")
