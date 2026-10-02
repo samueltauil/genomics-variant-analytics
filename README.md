@@ -6,34 +6,24 @@ It connects familiar Azure patterns for genomic landing, object storage, seconda
 
 > This is a demo solution accelerator and reference architecture built from validated patterns. It is not a released Microsoft blueprint or supported product. The full path has not been accepted end to end.
 
-## Try the local demo
+## Launch the local demo
 
-Requirements: Git, Python 3.10+, and PowerShell 7.2+. For a fresh checkout:
+Requirements: Git and Python 3.10+. The browser experience uses only synthetic data, runs on your machine, and does not need PowerShell, Azure credentials, or external packages. For a fresh checkout:
 
 ```powershell
 git clone https://github.com/samueltauil/genomics-variant-analytics.git
 Set-Location genomics-variant-analytics
 ```
 
-From the repository root, run a synthetic secondary-analysis job:
+Start the UI from the repository root:
 
-```powershell
-$demo = Join-Path $env:TEMP ("genomics-demo-" + [guid]::NewGuid().ToString("N"))
-New-Item -ItemType Directory -Force -Path $demo | Out-Null
-
-python -m scripts.run_secondary_pipeline `
-  --run-id SYN-README-DEMO-001 `
-  --work-dir (Join-Path $demo 'work') `
-  --publish-dir (Join-Path $demo 'published') `
-  --provenance-db (Join-Path $demo 'run-history.sqlite3') `
-  --reference-build SYN-demo-genome `
-  --reference-version synthetic-1385e2e921c4 `
-  --reference-manifest-sha256 7e3be36672095e4018dfded5466ddb002848387e19d314595cb1a128a231be83
+```sh
+python -m scripts.demo_ui
 ```
 
-The successful JSON report includes the generated run's outputs and provenance. The reference build, immutable version, and digest are explicit by design. This tiny pipeline uses demonstration alignment and variant-calling logic, so its output is not biologically validated. The run does not deploy or contact Azure.
+Open the local address printed in the terminal, usually `http://127.0.0.1:8765/`. Choose a step in the page to validate the synthetic manifest, prepare a placeholder landing layout, run the analysis, or rehearse safeguards. Press Ctrl+C in the terminal to stop the server and remove its temporary session files.
 
-For a guided 20-minute walkthrough of landing metadata, run provenance, failure handling, and reset, follow the [solution engineer execution guide](docs/solution-engineer-guide.md).
+The landing layout and analysis are separate component demos. The placeholder files do not feed the analysis. The synthetic pipeline uses demonstration alignment and variant-calling logic, so its output is not biologically validated. For a guided walkthrough, see the [solution engineer execution guide](docs/solution-engineer-guide.md).
 
 ## What you can explore
 
@@ -45,7 +35,7 @@ For a guided 20-minute walkthrough of landing metadata, run provenance, failure 
 | Governance and analytics | Synthetic access controls, lineage, query and view models, and exploratory AI-assisted analysis |
 | Engineering controls | Reference compatibility checks, data-hygiene gates, supply-chain evidence, and demo safeguards |
 
-The local landing and secondary-analysis commands are separate component demonstrations. They do not form a connected ingest-to-query flow. The local variant store and analytics use SQLite; they are not a deployed Delta table, notebook workspace, SQL endpoint, dashboard, or governed AI service.
+The local UI orchestrates separate component demonstrations. It does not connect landing data to the analysis or form an ingest-to-query flow. The local variant store and analytics use SQLite; they are not a deployed Delta table, notebook workspace, SQL endpoint, dashboard, or governed AI service.
 
 ## Target architecture
 
