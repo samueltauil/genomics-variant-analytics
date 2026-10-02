@@ -39,6 +39,7 @@
     "docs/metadata-store.md",
     "docs/reference-submission.md",
     "docs/secondary-pipeline.md",
+    "docs/solution-engineer-guide.md",
     "docs/variant-store.md",
     "docs/wiki/Architecture.md",
     "docs/wiki/Data-Model-and-Provenance.md",
@@ -52,26 +53,26 @@
   "flagged_matches": [
     {
       "path": "README.md",
-      "line": 12,
+      "line": 7,
       "boundary": "released-blueprint",
       "rule": "released-offering",
-      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "text": "> This is a demo solution accelerator and reference architecture built from validated patterns. It is not a released Microsoft blueprint or supported product. The full path has not been accepted end to end.",
       "disposition": "explicitly negated or prohibited"
     },
     {
       "path": "README.md",
-      "line": 12,
+      "line": 72,
       "boundary": "compliance",
       "rule": "automatic-compliance",
-      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "text": "Describe governance as configurable controls, not a compliance outcome. Describe AI-assisted analysis as exploratory, not clinical decision support. Do not imply an unverified customer deployment.",
       "disposition": "explicitly negated or prohibited"
     },
     {
       "path": "README.md",
-      "line": 12,
-      "boundary": "customer-reference",
-      "rule": "customer-attribution",
-      "text": "It is **not** a released Microsoft blueprint, not a supported product, and not a confirmed end-to-end customer deployment. Deploying it does not make genomic data compliant — compliance depends on your configuration, jurisdiction, policies, and operating procedures.",
+      "line": 72,
+      "boundary": "clinical-use",
+      "rule": "clinical-output",
+      "text": "Describe governance as configurable controls, not a compliance outcome. Describe AI-assisted analysis as exploratory, not clinical decision support. Do not imply an unverified customer deployment.",
       "disposition": "explicitly negated or prohibited"
     },
     {
@@ -264,6 +265,30 @@
       "boundary": "released-blueprint",
       "rule": "released-offering",
       "text": "It is a demo solution accelerator artifact, not a Microsoft product, released",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/solution-engineer-guide.md",
+      "line": 3,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "Run a useful demo without pretending the whole architecture is deployed. This repository is a demo solution accelerator and reference architecture, not a released Microsoft blueprint or a turnkey service.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/solution-engineer-guide.md",
+      "line": 103,
+      "boundary": "clinical-use",
+      "rule": "clinical-output",
+      "text": "The placeholder landing files do not feed the secondary-analysis run. These independent harnesses teach the component contracts, not an integrated data path or an end-to-end Azure deployment. The local variant store, governed queries, and view models use SQLite and synthetic records. They are not a deployed Delta table, analytics workspace, SQL endpoint, dashboard, or governed AI service. AI-assisted analysis is exploratory, not a clinical determination.",
+      "disposition": "explicitly negated or prohibited"
+    },
+    {
+      "path": "docs/solution-engineer-guide.md",
+      "line": 105,
+      "boundary": "released-blueprint",
+      "rule": "released-offering",
+      "text": "For a customer-facing walkthrough, label each statement as **shown locally**, **partially demonstrated**, or **not yet accepted live**. Do not claim automatic compliance, clinical decision support, a released Microsoft product, or a confirmed customer deployment.",
       "disposition": "explicitly negated or prohibited"
     },
     {
